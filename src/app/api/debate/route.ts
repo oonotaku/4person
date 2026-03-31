@@ -4,11 +4,24 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY?.trim() });
 const MODEL = "claude-sonnet-4-20250514";
 
 // ─── システムプロンプト ──────────────────────────────────────
-function getSystemPrompt(persona: string, language: "ja" | "en"): string {
+function getSystemPrompt(persona: string, language: "ja" | "en", isSub: boolean = false): string {
   const langInstruction =
     language === "ja"
       ? "必ず日本語で回答すること。"
       : "Always respond in English.";
+
+  const noTagInstruction =
+    language === "ja"
+      ? "返答の冒頭に[肯定者][批判者][俯瞰者][統合者][affirmer][critic][observer][synthesizer]などのロール名を絶対につけないこと。"
+      : "Never prefix your response with role names like [affirmer][critic][observer][synthesizer] or their Japanese equivalents.";
+
+  const lengthInstruction = isSub
+    ? language === "ja"
+      ? "1〜2文で簡潔に反応せよ。"
+      : "Respond in 1-2 sentences only."
+    : language === "ja"
+      ? "発言は3〜4文以内に収める"
+      : "Keep your response to 3-4 sentences.";
 
   const prompts: Record<string, string> = {
     affirmer: `あなたは「肯定者」です。
@@ -20,7 +33,10 @@ function getSystemPrompt(persona: string, language: "ja" | "en"): string {
 - 口癖：「実はここに大きなチャンスがある」
 - 締め方：可能性を必ず数字で示す（例：「〜なら○○%の市場が取れる」）
 - NG：感情的な励まし、根拠のない楽観
-- 発言は3〜4文以内に収める
+- ${lengthInstruction}
+
+## 制約
+${noTagInstruction}
 
 ## 言語
 ${langInstruction}`,
@@ -31,10 +47,13 @@ ${langInstruction}`,
 リスク・矛盾・穴を具体的に指摘する。
 
 ## 発言ルール
-- 口癖：「一点だけ確認したい」
+- 批判者らしい鋭い切り出し方をすること。「一点だけ確認したい」「その前提は本当に正しいか」などは口癖として時々使う程度でよい。毎回使う必要はない。
 - 締め方：必ず問いで終わる（例：「〜という点はどう説明するのか」）
 - NG：人格攻撃、ただの否定
-- 発言は3〜4文以内に収める
+- ${lengthInstruction}
+
+## 制約
+${noTagInstruction}
 
 ## 言語
 ${langInstruction}`,
@@ -48,7 +67,10 @@ ${langInstruction}`,
 - 口癖：「構造的に見ると」
 - 締め方：「つまり本質的な問いは〜だ」で締める
 - NG：どちらかに肩入れ、感情的な発言
-- 発言は3〜4文以内に収める
+- ${lengthInstruction}
+
+## 制約
+${noTagInstruction}
 
 ## 言語
 ${langInstruction}`,
@@ -62,7 +84,10 @@ ${langInstruction}`,
 - 口癖：「3人の議論を踏まえると」
 - 締め方：必ず「次のアクション：〜」で終わる
 - NG：曖昧な結論、アクションなしの締め
-- 発言は3〜4文以内に収める
+- ${lengthInstruction}
+
+## 制約
+${noTagInstruction}
 
 ## 言語
 ${langInstruction}`,
@@ -75,12 +100,13 @@ ${langInstruction}`,
 async function callClaude(
   persona: string,
   language: "ja" | "en",
-  messages: { role: "user" | "assistant"; content: string }[]
+  messages: { role: "user" | "assistant"; content: string }[],
+  isSub: boolean = false
 ): Promise<string> {
   const response = await client.messages.create({
     model: MODEL,
-    max_tokens: 512,
-    system: getSystemPrompt(persona, language),
+    max_tokens: isSub ? 256 : 512,
+    system: getSystemPrompt(persona, language, isSub),
     messages,
   });
 
@@ -111,6 +137,7 @@ export async function POST(request: Request) {
   const allPersonas = ["affirmer", "critic", "observer", "synthesizer"];
   const respondingPersonas: string[] =
     target && target.length > 0 ? target : allPersonas;
+  console.log("[route.ts] received target:", target, "→ respondingPersonas:", respondingPersonas);
 
   // 会話の起点メッセージを組み立て
   const baseContent = userMessage
@@ -200,7 +227,8 @@ export async function POST(request: Request) {
     });
   } else {
     // 特定人格への発言：指定人格がメイン、残りがサブ
-    const subPersonas = allPersonas.filter((p) => !target.includes(p));
+    const subPersonas = allPersonas.filter((p) => !target!.includes(p));
+    console.log("[route.ts] mainPersonas:", respondingPersonas, "subPersonas:", subPersonas);
 
     // メイン人格（指定順に返答）
     for (const persona of respondingPersonas) {
@@ -214,22 +242,21 @@ export async function POST(request: Request) {
 
     // サブ人格（一言ずつ反応）
     if (subPersonas.length > 0) {
-      const mainSummary = results
-        .map((r) => `[${r.persona}] ${r.content}`)
-        .join("\n");
-      const subContext = [
-        ...chainMessages,
-        {
-          role: "user" as const,
-          content:
-            language === "ja"
-              ? `上記の発言を踏まえて、一言コメントせよ（3〜4文以内）。\n${mainSummary}`
-              : `Based on the above, add a brief comment (3-4 sentences max).\n${mainSummary}`,
-        },
-      ];
+      const mainPersonaNames = respondingPersonas.join("、");
+      const mainSummary = results.map((r) => r.content).join("\n\n");
 
       for (const persona of subPersonas) {
-        const reply = await callClaude(persona, language, subContext);
+        const subContext = [
+          ...chainMessages,
+          {
+            role: "user" as const,
+            content:
+              language === "ja"
+                ? `${mainPersonaNames}の発言を受けて、あなたの視点から1〜2文で反応せよ。Takuへの返答ではなく、${mainPersonaNames}の発言へのコメントをせよ。\n\n${mainSummary}`
+                : `React to the following statement by ${mainPersonaNames} from your perspective in 1-2 sentences. This is a comment to ${mainPersonaNames}, not a reply to Taku.\n\n${mainSummary}`,
+          },
+        ];
+        const reply = await callClaude(persona, language, subContext, true);
         results.push({ persona, content: reply, isMain: false });
       }
     }

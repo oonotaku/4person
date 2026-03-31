@@ -114,13 +114,16 @@ export default function Home() {
     setIsLoading(true);
 
     try {
+      const apiTarget = target === "all" ? null : target;
+      console.log("[page.tsx] target state:", target, "→ API target:", apiTarget);
+
       const res = await fetch("/api/debate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           theme,
           messages: historyForApi,
-          target: target === "all" ? null : target,
+          target: apiTarget,
           userMessage: isFirstMessage ? null : text,
           language: lang,
         }),
