@@ -2,7 +2,7 @@
 
 作成日：2026-03-27  
 作成者：Taku Ono  
-ステータス：設計完了・実装待ち
+ステータス：MVP実装済み・SaaS化進行中
 
 ---
 
@@ -217,6 +217,29 @@ user_settings (
   intervention_strength text default 'standard'
 )
 ```
+
+---
+
+## 実装状況（2026-03-28時点）
+
+### デプロイ情報
+
+| 項目 | 内容 |
+|---|---|
+| 本番URL | https://4person.vercel.app |
+| GitHub | https://github.com/oonotaku/4person |
+
+### 実装済み機能
+
+- 4人格の連鎖議論（肯定者→批判者→俯瞰者→統合者）
+- 宛先指定（指定人格がフル返答、他3人が1〜2文のサブコメント）
+- タグ除去・プロンプト調整済み
+
+### 次にやること
+
+1. Supabase連携（会話履歴の保存・再開）
+2. Supabase Authでログイン機能
+3. Stripe課金でSaaS化
 
 ---
 
