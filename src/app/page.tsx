@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { createSession, getSessions, getMessages, saveMessage } from "@/lib/db";
+import type { Session as DbSession } from "@/lib/supabase";
 
 // ─── 型定義 ───────────────────────────────────────────────
 type Persona = "affirmer" | "critic" | "observer" | "synthesizer";
@@ -66,12 +68,21 @@ export default function Home() {
   const [lang, setLang] = useState<Language>("ja");
   const [targets, setTargets] = useState<Set<Persona>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [pastSessions, setPastSessions] = useState<DbSession[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // 過去のセッション一覧を取得
+  useEffect(() => {
+    getSessions()
+      .then((data) => setPastSessions((data as DbSession[]) ?? []))
+      .catch((e) => console.error("[getSessions error]", e));
+  }, []);
 
   // ターゲットトグル
   function toggleTarget(p: Persona) {
@@ -81,6 +92,33 @@ export default function Home() {
       else next.add(p);
       return next;
     });
+  }
+
+  // 過去セッションを読み込んで再開
+  async function loadSession(id: string) {
+    try {
+      const msgs = await getMessages(id);
+      if (!msgs) return;
+      const loaded: Message[] = (msgs as { id: string; speaker: Speaker; content: string; target: string | null; created_at: string }[]).map((m) => ({
+        id: m.id,
+        speaker: m.speaker,
+        content: m.content,
+        target: m.target ? (m.target.split(",") as Persona[]) : "all",
+        timestamp: new Date(m.created_at),
+      }));
+      setMessages(loaded);
+      setSessionId(id);
+    } catch (e) {
+      console.error("[loadSession error]", e);
+    }
+  }
+
+  // 新しい壁打ちを開始
+  function startNewChat() {
+    setMessages([]);
+    setSessionId(null);
+    setInput("");
+    setTargets(new Set());
   }
 
   // 送信処理（API連携）
@@ -98,9 +136,8 @@ export default function Home() {
       timestamp: new Date(),
     };
 
-    // 現在のメッセージ履歴をAPIに渡す形式に変換
     const isFirstMessage = messages.length === 0;
-    const theme = isFirstMessage ? text : (messages[0]?.content ?? text);
+    const theme = isFirstMessage ? text : (messages.find((m) => m.speaker === "taku")?.content ?? text);
 
     const historyForApi = messages
       .filter((m) => m.speaker !== "taku")
@@ -112,6 +149,26 @@ export default function Home() {
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setIsLoading(true);
+
+    // セッションIDを確定（初回のみ作成）
+    let currentSessionId = sessionId;
+    if (isFirstMessage) {
+      try {
+        const session = await createSession(theme, lang);
+        currentSessionId = session.id;
+        setSessionId(session.id);
+      } catch (e) {
+        console.error("[createSession error]", e);
+      }
+    }
+
+    // Takuの発言をDBに保存
+    if (currentSessionId) {
+      const targetStr = target === "all" ? undefined : target.join(",");
+      saveMessage(currentSessionId, "taku", text, targetStr).catch((e) =>
+        console.error("[saveMessage taku error]", e)
+      );
+    }
 
     try {
       const apiTarget = target === "all" ? null : target;
@@ -126,6 +183,7 @@ export default function Home() {
           target: apiTarget,
           userMessage: isFirstMessage ? null : text,
           language: lang,
+          sessionId: currentSessionId,
         }),
       });
 
@@ -151,6 +209,13 @@ export default function Home() {
             resolve();
           }, 300 * (i + 1));
         });
+      }
+
+      // 過去セッション一覧を更新
+      if (isFirstMessage) {
+        getSessions()
+          .then((data) => setPastSessions((data as DbSession[]) ?? []))
+          .catch(() => {});
       }
     } catch (err) {
       console.error(err);
@@ -192,6 +257,10 @@ export default function Home() {
     all: lang === "ja" ? "全員" : "All",
     you: lang === "ja" ? "あなた" : "You",
     loading: lang === "ja" ? "考え中..." : "Thinking...",
+    newChat: lang === "ja" ? "新しい壁打ち" : "New Chat",
+    pastSessions: lang === "ja" ? "過去の壁打ち" : "Past Sessions",
+    resume: lang === "ja" ? "続きから" : "Resume",
+    noHistory: lang === "ja" ? "まだ履歴がありません" : "No history yet",
   };
 
   return (
@@ -199,19 +268,29 @@ export default function Home() {
       {/* ヘッダー */}
       <header className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200 shadow-sm">
         <h1 className="text-lg font-bold text-gray-800 tracking-tight">{L.title}</h1>
-        {/* 言語トグル */}
-        <button
-          onClick={() => setLang((l) => (l === "ja" ? "en" : "ja"))}
-          className="text-sm px-3 py-1.5 rounded-full border border-gray-300 bg-white hover:bg-gray-100 transition-colors font-medium text-gray-600"
-        >
-          {lang === "ja" ? "EN" : "JA"}
-        </button>
+        <div className="flex items-center gap-2">
+          {messages.length > 0 && (
+            <button
+              onClick={startNewChat}
+              className="text-sm px-3 py-1.5 rounded-full border border-indigo-300 bg-white hover:bg-indigo-50 transition-colors font-medium text-indigo-600"
+            >
+              {L.newChat}
+            </button>
+          )}
+          {/* 言語トグル */}
+          <button
+            onClick={() => setLang((l) => (l === "ja" ? "en" : "ja"))}
+            className="text-sm px-3 py-1.5 rounded-full border border-gray-300 bg-white hover:bg-gray-100 transition-colors font-medium text-gray-600"
+          >
+            {lang === "ja" ? "EN" : "JA"}
+          </button>
+        </div>
       </header>
 
       {/* チャットエリア */}
       <main className="flex-1 overflow-y-auto px-4 py-4 space-y-3 max-w-3xl w-full mx-auto">
         {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-center text-gray-400 py-20">
+          <div className="flex flex-col items-center justify-center min-h-full text-center text-gray-400 py-12">
             <div className="text-5xl mb-4">💬</div>
             <p className="text-base font-medium">
               {lang === "ja"
@@ -223,6 +302,39 @@ export default function Home() {
                 ? "🟢肯定者 → 🔴批判者 → 🔵俯瞰者 → ⚖️統合者 の順で発言します"
                 : "🟢Affirmer → 🔴Critic → 🔵Observer → ⚖️Synthesizer"}
             </p>
+
+            {/* 過去セッション一覧 */}
+            <div className="w-full max-w-md mt-10">
+              <p className="text-sm font-semibold text-gray-500 mb-3 text-left">
+                {L.pastSessions}
+              </p>
+              {pastSessions.length === 0 ? (
+                <p className="text-sm text-gray-400 text-left">{L.noHistory}</p>
+              ) : (
+                <div className="space-y-2">
+                  {pastSessions.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => loadSession(s.id)}
+                      className="w-full text-left px-4 py-3 bg-white rounded-xl border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 transition-colors shadow-sm group"
+                    >
+                      <p className="text-sm font-medium text-gray-800 truncate">{s.theme}</p>
+                      <div className="flex items-center justify-between mt-0.5">
+                        <p className="text-xs text-gray-400">
+                          {new Date(s.created_at).toLocaleDateString(
+                            lang === "ja" ? "ja-JP" : "en-US",
+                            { year: "numeric", month: "short", day: "numeric" }
+                          )}
+                        </p>
+                        <span className="text-xs text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {L.resume} →
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

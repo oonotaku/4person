@@ -1,4 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { saveMessage, saveFinalConclusion } from "@/lib/db";
+import type { Speaker } from "@/lib/supabase";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY?.trim() });
 const MODEL = "claude-sonnet-4-20250514";
@@ -115,6 +117,25 @@ async function callClaude(
   return block.text;
 }
 
+// ─── DB保存（失敗しても議論は続行） ─────────────────────────
+async function dbSaveMessage(sessionId: string | undefined, speaker: Speaker, content: string) {
+  if (!sessionId) return;
+  try {
+    await saveMessage(sessionId, speaker, content);
+  } catch (e) {
+    console.error("[DB saveMessage error]", e);
+  }
+}
+
+async function dbSaveFinalConclusion(sessionId: string | undefined, conclusion: string) {
+  if (!sessionId) return;
+  try {
+    await saveFinalConclusion(sessionId, conclusion);
+  } catch (e) {
+    console.error("[DB saveFinalConclusion error]", e);
+  }
+}
+
 // ─── POSTハンドラー ──────────────────────────────────────────
 export async function POST(request: Request) {
   const body = await request.json();
@@ -124,12 +145,14 @@ export async function POST(request: Request) {
     target,
     userMessage,
     language,
+    sessionId,
   } = body as {
     theme: string;
     messages: { role: "user" | "assistant"; content: string }[];
     target: string[] | null;
     userMessage: string | null;
     language: "ja" | "en";
+    sessionId?: string;
   };
 
   try {
@@ -163,6 +186,7 @@ export async function POST(request: Request) {
     // 1. 肯定者
     const affirmerReply = await callClaude("affirmer", language, chainMessages);
     results.push({ persona: "affirmer", content: affirmerReply, isMain: true });
+    await dbSaveMessage(sessionId, "affirmer", affirmerReply);
     chainMessages.push({
       role: "assistant",
       content:
@@ -181,6 +205,7 @@ export async function POST(request: Request) {
     });
     const criticReply = await callClaude("critic", language, chainMessages);
     results.push({ persona: "critic", content: criticReply, isMain: true });
+    await dbSaveMessage(sessionId, "critic", criticReply);
     chainMessages.push({
       role: "assistant",
       content:
@@ -199,6 +224,7 @@ export async function POST(request: Request) {
     });
     const observerReply = await callClaude("observer", language, chainMessages);
     results.push({ persona: "observer", content: observerReply, isMain: true });
+    await dbSaveMessage(sessionId, "observer", observerReply);
     chainMessages.push({
       role: "assistant",
       content:
@@ -225,6 +251,8 @@ export async function POST(request: Request) {
       content: synthesizerReply,
       isMain: true,
     });
+    await dbSaveMessage(sessionId, "synthesizer", synthesizerReply);
+    await dbSaveFinalConclusion(sessionId, synthesizerReply);
   } else {
     // 特定人格への発言：指定人格がメイン、残りがサブ
     const subPersonas = allPersonas.filter((p) => !target!.includes(p));
@@ -234,6 +262,7 @@ export async function POST(request: Request) {
     for (const persona of respondingPersonas) {
       const reply = await callClaude(persona, language, chainMessages);
       results.push({ persona, content: reply, isMain: true });
+      await dbSaveMessage(sessionId, persona as Speaker, reply);
       chainMessages.push({
         role: "assistant",
         content: `[${persona}] ${reply}`,
@@ -258,6 +287,7 @@ export async function POST(request: Request) {
         ];
         const reply = await callClaude(persona, language, subContext, true);
         results.push({ persona, content: reply, isMain: false });
+        await dbSaveMessage(sessionId, persona as Speaker, reply);
       }
     }
   }

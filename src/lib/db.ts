@@ -1,0 +1,64 @@
+import { supabase, Speaker, Language } from './supabase'
+
+export async function createSession(theme: string, language: Language) {
+  const { data, error } = await supabase
+    .from('sessions')
+    .insert({ theme, language })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function getSessions() {
+  const { data, error } = await supabase
+    .from('sessions')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(20)
+  if (error) throw error
+  return data
+}
+
+export async function getSession(sessionId: string) {
+  const { data, error } = await supabase
+    .from('sessions')
+    .select('*')
+    .eq('id', sessionId)
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function saveMessage(
+  sessionId: string,
+  speaker: Speaker,
+  content: string,
+  target?: string
+) {
+  const { data, error } = await supabase
+    .from('messages')
+    .insert({ session_id: sessionId, speaker, content, target })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function getMessages(sessionId: string) {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('*')
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return data
+}
+
+export async function saveFinalConclusion(sessionId: string, conclusion: string) {
+  const { error } = await supabase
+    .from('sessions')
+    .update({ final_conclusion: conclusion })
+    .eq('id', sessionId)
+  if (error) throw error
+}
