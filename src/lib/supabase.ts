@@ -15,6 +15,7 @@ export interface Session {
   language: Language
   created_at: string
   final_conclusion?: string
+  is_completed?: boolean
 }
 
 export interface Message {

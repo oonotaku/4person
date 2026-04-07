@@ -115,6 +115,24 @@ export default function Home() {
       }));
       setMessages(loaded);
       setSessionId(id);
+
+      // 完了済みセッションはサマリーを再生成して表示
+      const sessionData = pastSessions.find((s) => s.id === id);
+      if (sessionData?.is_completed) {
+        try {
+          const res = await fetch("/api/summary", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId: id }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setSummary(data.summary);
+          }
+        } catch (e) {
+          console.error("[loadSession summary error]", e);
+        }
+      }
     } catch (e) {
       console.error("[loadSession error]", e);
     }
@@ -275,6 +293,7 @@ export default function Home() {
     you: lang === "ja" ? "あなた" : "You",
     loading: lang === "ja" ? "考え中..." : "Thinking...",
     newChat: lang === "ja" ? "新しい壁打ち" : "New Chat",
+    backToList: lang === "ja" ? "← 一覧に戻る" : "← Back to list",
     pastSessions: lang === "ja" ? "過去の壁打ち" : "Past Sessions",
     resume: lang === "ja" ? "続きから" : "Resume",
     noHistory: lang === "ja" ? "まだ履歴がありません" : "No history yet",
@@ -291,7 +310,7 @@ export default function Home() {
               onClick={startNewChat}
               className="text-sm px-3 py-1.5 rounded-full border border-indigo-300 bg-white hover:bg-indigo-50 transition-colors font-medium text-indigo-600"
             >
-              {L.newChat}
+              {L.backToList}
             </button>
           )}
           {/* 言語トグル */}
@@ -337,7 +356,7 @@ export default function Home() {
                     >
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium text-gray-800 truncate">{s.theme}</p>
-                        {s.final_conclusion && (
+                        {s.is_completed && (
                           <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
                             {lang === "ja" ? "完了" : "Done"}
                           </span>

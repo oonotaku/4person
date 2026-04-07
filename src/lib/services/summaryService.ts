@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { supabase } from "@/lib/supabase";
 import { getSession, getMessages } from "@/lib/db";
 import type { Summary } from "@/types/discussion";
 import type { Language } from "@/types/database";
@@ -178,6 +179,9 @@ export async function generateDiscussionSummary(sessionId: string): Promise<Summ
 
   // 4視点を統合して最終サマリーを生成
   const summary = await synthesizeSummary(perspectives, session.theme, language);
+
+  // セッションを完了済みとしてマーク（失敗しても返却は続行）
+  await supabase.from("sessions").update({ is_completed: true }).eq("id", sessionId);
 
   return summary;
 }
