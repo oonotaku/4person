@@ -53,6 +53,12 @@ const PERSONAS: Record<
 };
 
 // ─── APIレスポンス型 ──────────────────────────────────────
+interface Summary {
+  conclusion: string;
+  main_points: string[];
+  next_actions: string[];
+}
+
 interface DebateResponse {
   responses: {
     persona: Persona;
@@ -69,6 +75,7 @@ export default function Home() {
   const [targets, setTargets] = useState<Set<Persona>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [summary, setSummary] = useState<Summary | null>(null);
   const [pastSessions, setPastSessions] = useState<DbSession[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -119,6 +126,7 @@ export default function Home() {
     setSessionId(null);
     setInput("");
     setTargets(new Set());
+    setSummary(null);
   }
 
   // 送信処理（API連携）
@@ -189,11 +197,19 @@ export default function Home() {
 
       if (!res.ok) throw new Error(`API error: ${res.status}`);
 
-      const data: DebateResponse = await res.json();
+      const data = await res.json();
+
+      // done 送信時はサマリーを表示してスキップ
+      if (data.isDone) {
+        setSummary(data.summary as Summary);
+        return;
+      }
+
+      const typed = data as DebateResponse;
 
       // 順番に表示（300ms間隔）
-      for (let i = 0; i < data.responses.length; i++) {
-        const r = data.responses[i];
+      for (let i = 0; i < typed.responses.length; i++) {
+        const r = typed.responses[i];
         await new Promise<void>((resolve) => {
           setTimeout(() => {
             setMessages((prev) => [
@@ -388,6 +404,59 @@ export default function Home() {
                 <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />
               </span>
               {L.loading}
+            </div>
+          </div>
+        )}
+
+        {summary && (
+          <div className="mt-2 rounded-2xl border border-indigo-200 bg-white shadow-md overflow-hidden">
+            <div className="px-5 py-3 bg-indigo-600">
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                <span aria-hidden="true">📋</span>
+                {lang === "ja" ? "議論のまとめ" : "Discussion Summary"}
+              </h3>
+            </div>
+            <div className="px-5 py-4 space-y-4">
+              <section>
+                <p className="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-2">
+                  💡 {lang === "ja" ? "結論" : "Conclusion"}
+                </p>
+                <p className="text-sm text-gray-800 leading-relaxed bg-indigo-50 rounded-xl px-4 py-3 border border-indigo-100">
+                  {summary.conclusion}
+                </p>
+              </section>
+              <div className="border-t border-gray-100" />
+              <section>
+                <p className="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-2">
+                  📌 {lang === "ja" ? "主な論点" : "Main Points"}
+                </p>
+                <ul className="space-y-2">
+                  {summary.main_points.map((point, i) => (
+                    <li key={i} className="flex gap-2.5 text-sm text-gray-800">
+                      <span className="mt-0.5 w-4 h-4 shrink-0 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-bold">
+                        {i + 1}
+                      </span>
+                      <span className="leading-relaxed">{point}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+              <div className="border-t border-gray-100" />
+              <section>
+                <p className="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-2">
+                  🚀 {lang === "ja" ? "次のアクション" : "Next Actions"}
+                </p>
+                <ol className="space-y-2">
+                  {summary.next_actions.map((action, i) => (
+                    <li key={i} className="flex gap-2.5 text-sm text-gray-800 p-3 rounded-xl border border-gray-100 bg-gray-50">
+                      <span className="shrink-0 text-xs font-bold text-indigo-500 mt-0.5 w-4 text-right">
+                        {i + 1}.
+                      </span>
+                      <span className="leading-relaxed">{action}</span>
+                    </li>
+                  ))}
+                </ol>
+              </section>
             </div>
           </div>
         )}
