@@ -202,6 +202,7 @@ export default function Home() {
       // done 送信時はサマリーを表示してスキップ
       if (data.isDone) {
         setSummary(data.summary as Summary);
+        setIsLoading(false);
         return;
       }
 
