@@ -16,6 +16,7 @@ export interface Session {
   created_at: string
   final_conclusion?: string
   is_completed?: boolean
+  summary?: { conclusion: string; main_points: string[]; next_actions: string[] } | null
 }
 
 export interface Message {

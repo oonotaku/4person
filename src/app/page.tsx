@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { createSession, getSessions, getMessages, saveMessage } from "@/lib/db";
+import { createSession, getSessions, getSession, getMessages, saveMessage } from "@/lib/db";
 import type { Session as DbSession } from "@/lib/supabase";
 
 // ─── 型定義 ───────────────────────────────────────────────
@@ -116,18 +116,13 @@ export default function Home() {
       setMessages(loaded);
       setSessionId(id);
 
-      // 完了済みセッションはサマリーを再生成して表示
+      // 完了済みセッションはDBのsummaryカラムから読んで表示
       const sessionData = pastSessions.find((s) => s.id === id);
       if (sessionData?.is_completed) {
         try {
-          const res = await fetch("/api/summary", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sessionId: id }),
-          });
-          if (res.ok) {
-            const data = await res.json();
-            setSummary(data.summary);
+          const session = await getSession(id);
+          if (session?.summary) {
+            setSummary(session.summary as Summary);
           }
         } catch (e) {
           console.error("[loadSession summary error]", e);

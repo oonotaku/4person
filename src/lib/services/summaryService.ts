@@ -180,8 +180,11 @@ export async function generateDiscussionSummary(sessionId: string): Promise<Summ
   // 4視点を統合して最終サマリーを生成
   const summary = await synthesizeSummary(perspectives, session.theme, language);
 
-  // セッションを完了済みとしてマーク（失敗しても返却は続行）
-  await supabase.from("sessions").update({ is_completed: true }).eq("id", sessionId);
+  // セッションを完了済みとしてマーク＆サマリーを保存（失敗しても返却は続行）
+  await supabase
+    .from("sessions")
+    .update({ is_completed: true, summary })
+    .eq("id", sessionId);
 
   return summary;
 }
