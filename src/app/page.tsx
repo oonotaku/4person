@@ -335,7 +335,14 @@ export default function Home() {
                       onClick={() => loadSession(s.id)}
                       className="w-full text-left px-4 py-3 bg-white rounded-xl border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 transition-colors shadow-sm group"
                     >
-                      <p className="text-sm font-medium text-gray-800 truncate">{s.theme}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-gray-800 truncate">{s.theme}</p>
+                        {s.final_conclusion && (
+                          <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                            {lang === "ja" ? "完了" : "Done"}
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center justify-between mt-0.5">
                         <p className="text-xs text-gray-400">
                           {new Date(s.created_at).toLocaleDateString(
