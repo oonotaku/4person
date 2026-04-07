@@ -1,8 +1,11 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { createSession, getSessions, getSession, getMessages, saveMessage } from "@/lib/db";
+import { createSession, getSessions, getMessages, saveMessage } from "@/lib/db";
+import { isDoneMessage } from "@/lib/utils/messageHandler";
 import type { Session as DbSession } from "@/lib/supabase";
+import type { Summary } from "@/types/discussion";
+import DiscussionSummary from "@/components/DiscussionSummary";
 
 // ─── 型定義 ───────────────────────────────────────────────
 type Persona = "affirmer" | "critic" | "observer" | "synthesizer";
@@ -53,12 +56,6 @@ const PERSONAS: Record<
 };
 
 // ─── APIレスポンス型 ──────────────────────────────────────
-interface Summary {
-  conclusion: string;
-  main_points: string[];
-  next_actions: string[];
-}
-
 interface DebateResponse {
   responses: {
     persona: Persona;
@@ -68,21 +65,27 @@ interface DebateResponse {
 }
 
 // ─── メインコンポーネント ──────────────────────────────────
-export default function Home() {
+export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [lang, setLang] = useState<Language>("ja");
   const [targets, setTargets] = useState<Set<Persona>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [summary, setSummary] = useState<Summary | null>(null);
   const [pastSessions, setPastSessions] = useState<DbSession[]>([]);
+
+  // 議論終了フロー
+  const [showDoneConfirm, setShowDoneConfirm] = useState(false);
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, summary]);
 
   // 過去のセッション一覧を取得
   useEffect(() => {
@@ -106,7 +109,15 @@ export default function Home() {
     try {
       const msgs = await getMessages(id);
       if (!msgs) return;
-      const loaded: Message[] = (msgs as { id: string; speaker: Speaker; content: string; target: string | null; created_at: string }[]).map((m) => ({
+      const loaded: Message[] = (
+        msgs as {
+          id: string;
+          speaker: Speaker;
+          content: string;
+          target: string | null;
+          created_at: string;
+        }[]
+      ).map((m) => ({
         id: m.id,
         speaker: m.speaker,
         content: m.content,
@@ -115,19 +126,8 @@ export default function Home() {
       }));
       setMessages(loaded);
       setSessionId(id);
-
-      // 完了済みセッションはDBのsummaryカラムから読んで表示
-      const sessionData = pastSessions.find((s) => s.id === id);
-      if (sessionData?.is_completed) {
-        try {
-          const session = await getSession(id);
-          if (session?.summary) {
-            setSummary(session.summary as Summary);
-          }
-        } catch (e) {
-          console.error("[loadSession summary error]", e);
-        }
-      }
+      setSummary(null);
+      setSummaryError(null);
     } catch (e) {
       console.error("[loadSession error]", e);
     }
@@ -140,12 +140,54 @@ export default function Home() {
     setInput("");
     setTargets(new Set());
     setSummary(null);
+    setSummaryError(null);
+    setShowDoneConfirm(false);
+  }
+
+  // サマリー生成（リトライでも呼び出せる）
+  async function generateSummary() {
+    if (!sessionId) return;
+
+    setSummaryError(null);
+    setIsSummarizing(true);
+    try {
+      const res = await fetch("/api/summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(errData.error ?? `HTTP ${res.status}`);
+      }
+      const data = (await res.json()) as { summary: Summary };
+      setSummary(data.summary);
+    } catch (err) {
+      console.error("[summary error]", err);
+      setSummaryError(
+        err instanceof Error ? err.message : String(err)
+      );
+    } finally {
+      setIsSummarizing(false);
+    }
+  }
+
+  // 議論終了＆サマリー生成
+  async function handleConfirmDone() {
+    setShowDoneConfirm(false);
+    await generateSummary();
   }
 
   // 送信処理（API連携）
   async function handleSubmit() {
     const text = input.trim();
     if (!text || isLoading) return;
+
+    // 「done」チェック：セッションが存在する場合のみ確認ダイアログを表示
+    if (isDoneMessage(text) && sessionId) {
+      setShowDoneConfirm(true);
+      return;
+    }
 
     const target: Persona[] | "all" = targets.size === 0 ? "all" : Array.from(targets);
 
@@ -158,7 +200,8 @@ export default function Home() {
     };
 
     const isFirstMessage = messages.length === 0;
-    const theme = isFirstMessage ? text : (messages.find((m) => m.speaker === "taku")?.content ?? text);
+    const theme =
+      isFirstMessage ? text : (messages.find((m) => m.speaker === "taku")?.content ?? text);
 
     const historyForApi = messages
       .filter((m) => m.speaker !== "taku")
@@ -193,7 +236,7 @@ export default function Home() {
 
     try {
       const apiTarget = target === "all" ? null : target;
-      console.log("[page.tsx] target state:", target, "→ API target:", apiTarget);
+      console.log("[ChatInterface] target state:", target, "→ API target:", apiTarget);
 
       const res = await fetch("/api/debate", {
         method: "POST",
@@ -210,20 +253,11 @@ export default function Home() {
 
       if (!res.ok) throw new Error(`API error: ${res.status}`);
 
-      const data = await res.json();
-
-      // done 送信時はサマリーを表示してスキップ
-      if (data.isDone) {
-        setSummary(data.summary as Summary);
-        setIsLoading(false);
-        return;
-      }
-
-      const typed = data as DebateResponse;
+      const data: DebateResponse = await res.json();
 
       // 順番に表示（300ms間隔）
-      for (let i = 0; i < typed.responses.length; i++) {
-        const r = typed.responses[i];
+      for (let i = 0; i < data.responses.length; i++) {
+        const r = data.responses[i];
         await new Promise<void>((resolve) => {
           setTimeout(() => {
             setMessages((prev) => [
@@ -288,14 +322,48 @@ export default function Home() {
     you: lang === "ja" ? "あなた" : "You",
     loading: lang === "ja" ? "考え中..." : "Thinking...",
     newChat: lang === "ja" ? "新しい壁打ち" : "New Chat",
-    backToList: lang === "ja" ? "← 一覧に戻る" : "← Back to list",
     pastSessions: lang === "ja" ? "過去の壁打ち" : "Past Sessions",
     resume: lang === "ja" ? "続きから" : "Resume",
     noHistory: lang === "ja" ? "まだ履歴がありません" : "No history yet",
+    doneConfirmTitle: lang === "ja" ? "議論を終了しますか？" : "End the discussion?",
+    doneConfirmBody:
+      lang === "ja"
+        ? "4人格がこれまでの議論をまとめたサマリーを生成します。"
+        : "The 4 personas will generate a summary of this discussion.",
+    doneConfirmOk: lang === "ja" ? "終了してサマリーを生成" : "End & Generate Summary",
+    doneConfirmCancel: lang === "ja" ? "キャンセル" : "Cancel",
+    discussionEnded: lang === "ja" ? "この議論は終了しました" : "This discussion has ended",
   };
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
+      {/* 確認ダイアログ */}
+      {showDoneConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4">
+            <h2 className="text-base font-bold text-gray-800 mb-2">{L.doneConfirmTitle}</h2>
+            <p className="text-sm text-gray-500 mb-6">{L.doneConfirmBody}</p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowDoneConfirm(false);
+                  setInput("");
+                }}
+                className="text-sm px-4 py-2 rounded-xl border border-gray-300 bg-white hover:bg-gray-100 text-gray-600 font-medium transition-colors"
+              >
+                {L.doneConfirmCancel}
+              </button>
+              <button
+                onClick={handleConfirmDone}
+                className="text-sm px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition-colors"
+              >
+                {L.doneConfirmOk}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ヘッダー */}
       <header className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200 shadow-sm">
         <h1 className="text-lg font-bold text-gray-800 tracking-tight">{L.title}</h1>
@@ -305,7 +373,7 @@ export default function Home() {
               onClick={startNewChat}
               className="text-sm px-3 py-1.5 rounded-full border border-indigo-300 bg-white hover:bg-indigo-50 transition-colors font-medium text-indigo-600"
             >
-              {L.backToList}
+              {L.newChat}
             </button>
           )}
           {/* 言語トグル */}
@@ -349,14 +417,7 @@ export default function Home() {
                       onClick={() => loadSession(s.id)}
                       className="w-full text-left px-4 py-3 bg-white rounded-xl border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 transition-colors shadow-sm group"
                     >
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-gray-800 truncate">{s.theme}</p>
-                        {s.is_completed && (
-                          <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
-                            {lang === "ja" ? "完了" : "Done"}
-                          </span>
-                        )}
-                      </div>
+                      <p className="text-sm font-medium text-gray-800 truncate">{s.theme}</p>
                       <div className="flex items-center justify-between mt-0.5">
                         <p className="text-xs text-gray-400">
                           {new Date(s.created_at).toLocaleDateString(
@@ -430,57 +491,15 @@ export default function Home() {
           </div>
         )}
 
-        {summary && (
-          <div className="mt-2 rounded-2xl border border-indigo-200 bg-white shadow-md overflow-hidden">
-            <div className="px-5 py-3 bg-indigo-600">
-              <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
-                <span aria-hidden="true">📋</span>
-                {lang === "ja" ? "議論のまとめ" : "Discussion Summary"}
-              </h3>
-            </div>
-            <div className="px-5 py-4 space-y-4">
-              <section>
-                <p className="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-2">
-                  💡 {lang === "ja" ? "結論" : "Conclusion"}
-                </p>
-                <p className="text-sm text-gray-800 leading-relaxed bg-indigo-50 rounded-xl px-4 py-3 border border-indigo-100">
-                  {summary.conclusion}
-                </p>
-              </section>
-              <div className="border-t border-gray-100" />
-              <section>
-                <p className="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-2">
-                  📌 {lang === "ja" ? "主な論点" : "Main Points"}
-                </p>
-                <ul className="space-y-2">
-                  {summary.main_points.map((point, i) => (
-                    <li key={i} className="flex gap-2.5 text-sm text-gray-800">
-                      <span className="mt-0.5 w-4 h-4 shrink-0 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-bold">
-                        {i + 1}
-                      </span>
-                      <span className="leading-relaxed">{point}</span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-              <div className="border-t border-gray-100" />
-              <section>
-                <p className="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-2">
-                  🚀 {lang === "ja" ? "次のアクション" : "Next Actions"}
-                </p>
-                <ol className="space-y-2">
-                  {summary.next_actions.map((action, i) => (
-                    <li key={i} className="flex gap-2.5 text-sm text-gray-800 p-3 rounded-xl border border-gray-100 bg-gray-50">
-                      <span className="shrink-0 text-xs font-bold text-indigo-500 mt-0.5 w-4 text-right">
-                        {i + 1}.
-                      </span>
-                      <span className="leading-relaxed">{action}</span>
-                    </li>
-                  ))}
-                </ol>
-              </section>
-            </div>
-          </div>
+        {/* サマリー（ローディング・エラー・結果を統合表示） */}
+        {(isSummarizing || summaryError || summary) && (
+          <DiscussionSummary
+            summary={summary}
+            lang={lang}
+            isLoading={isSummarizing}
+            error={summaryError}
+            onRetry={generateSummary}
+          />
         )}
 
         <div ref={bottomRef} />
@@ -488,6 +507,13 @@ export default function Home() {
 
       {/* 入力エリア */}
       <div className="bg-white border-t border-gray-200 px-4 pt-3 pb-4 max-w-3xl w-full mx-auto">
+        {/* 議論終了バナー */}
+        {summary && (
+          <div className="mb-3 flex items-center justify-center gap-2 rounded-xl bg-gray-100 border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-500">
+            <span aria-hidden="true">🔒</span>
+            {L.discussionEnded}
+          </div>
+        )}
         {/* 発言先トグル */}
         <div className="flex items-center gap-1.5 mb-2 flex-wrap">
           <span className="text-xs text-gray-500 shrink-0">{L.targetLabel}</span>
@@ -529,12 +555,12 @@ export default function Home() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={L.placeholder}
-            disabled={isLoading}
+            disabled={isLoading || isSummarizing || !!summary}
             className="flex-1 resize-none border border-gray-300 rounded-xl px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent disabled:opacity-50 leading-relaxed"
           />
           <button
             onClick={handleSubmit}
-            disabled={isLoading || !input.trim()}
+            disabled={isLoading || isSummarizing || !!summary || !input.trim()}
             className="shrink-0 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors flex flex-col items-center gap-0.5 h-[60px] justify-center"
           >
             <span>{L.send}</span>

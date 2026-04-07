@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { saveMessage, saveFinalConclusion } from "@/lib/db";
 import type { Speaker } from "@/lib/supabase";
+import { generateDiscussionSummary } from "@/lib/services/summaryService";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY?.trim() });
 const MODEL = "claude-sonnet-4-20250514";
@@ -156,6 +157,15 @@ export async function POST(request: Request) {
   };
 
   try {
+  // "done" 検知：通常の議論処理をスキップしてサマリーを生成
+  if (userMessage && userMessage.trim().toLowerCase() === 'done') {
+    if (!sessionId) {
+      return Response.json({ error: 'sessionId is required to generate summary' }, { status: 400 })
+    }
+    const summary = await generateDiscussionSummary(sessionId)
+    return Response.json({ isDone: true, summary })
+  }
+
   // 応答する人格を決定
   const allPersonas = ["affirmer", "critic", "observer", "synthesizer"];
   const respondingPersonas: string[] =
