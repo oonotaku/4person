@@ -22,6 +22,13 @@ function localizeError(message: string): string {
   return message;
 }
 
+const PERSONAS = [
+  { emoji: "🟢", name: "肯定者", desc: "可能性を最大化する" },
+  { emoji: "🔴", name: "批判者", desc: "甘い前提を暴く" },
+  { emoji: "🔵", name: "俯瞰者", desc: "構造を整理する" },
+  { emoji: "⚖️", name: "統合者", desc: "最適解を出す" },
+];
+
 export default function AuthPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -34,11 +41,8 @@ export default function AuthPage() {
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // ログイン済みならトップへ
   useEffect(() => {
-    if (!loading && user) {
-      router.replace("/");
-    }
+    if (!loading && user) router.replace("/");
   }, [user, loading, router]);
 
   function handleTabChange(next: Tab) {
@@ -49,7 +53,7 @@ export default function AuthPage() {
   }
 
   function openResetView() {
-    setResetEmail(email); // ログインフォームに入力済みのメアドを引き継ぐ
+    setResetEmail(email);
     setError(null);
     setSuccessMsg(null);
     setView("reset");
@@ -86,7 +90,6 @@ export default function AuthPage() {
     setError(null);
     setSuccessMsg(null);
     setIsSubmitting(true);
-
     try {
       if (tab === "login") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -109,159 +112,199 @@ export default function AuthPage() {
 
   if (loading || user) return null;
 
-  return (
-    <div className="flex flex-col min-h-screen bg-gray-50 items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        {/* タイトル */}
-        <div className="text-center mb-8">
-          <div className="text-4xl mb-3">💬</div>
-          <h1 className="text-xl font-bold text-gray-800">4人格 壁打ちAI</h1>
-          <p className="text-sm text-gray-500 mt-1">肯定者・批判者・俯瞰者・統合者と議論する</p>
-        </div>
+  const inputClass =
+    "w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent bg-gray-50 transition";
 
-        {/* カード */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-          {/* タブ */}
-          <div className="flex border-b border-gray-200">
-            <button
-              onClick={() => handleTabChange("login")}
-              className={`flex-1 py-3 text-sm font-semibold transition-colors ${
-                tab === "login"
-                  ? "text-indigo-600 border-b-2 border-indigo-600 bg-white"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
+  return (
+    <div
+      className="min-h-screen flex flex-col lg:flex-row"
+      style={{ background: "linear-gradient(135deg, #6C3CE1 0%, #1A1A4E 100%)" }}
+    >
+      {/* ── 左：ブランドエリア ── */}
+      <div className="flex flex-col justify-center items-center lg:items-start px-8 py-10 lg:py-0 lg:px-20 lg:w-1/2">
+        {/* ロゴ */}
+        <h1 className="text-5xl lg:text-7xl font-black text-white tracking-tight leading-none">
+          FRICTION
+        </h1>
+
+        {/* キャッチコピー */}
+        <p className="mt-4 text-white/70 text-sm lg:text-base font-light leading-relaxed max-w-xs text-center lg:text-left">
+          本当に強いアイデアは、<br className="hidden lg:block" />
+          反論に耐えたものだけだ。
+        </p>
+
+        {/* 4人格 */}
+        <div className="flex flex-wrap gap-2 mt-8 justify-center lg:justify-start">
+          {PERSONAS.map((p) => (
+            <div
+              key={p.name}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10"
             >
-              ログイン
-            </button>
-            <button
-              onClick={() => handleTabChange("signup")}
-              className={`flex-1 py-3 text-sm font-semibold transition-colors ${
-                tab === "signup"
-                  ? "text-indigo-600 border-b-2 border-indigo-600 bg-white"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              新規登録
-            </button>
-          </div>
+              <span className="text-base leading-none">{p.emoji}</span>
+              <div>
+                <p className="text-white text-xs font-semibold leading-tight">{p.name}</p>
+                <p className="text-white/50 text-[10px] leading-tight">{p.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── 右：フォームカード ── */}
+      <div className="flex items-center justify-center px-4 py-8 lg:py-0 lg:px-16 lg:w-1/2">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
 
           {view === "reset" ? (
             /* パスワードリセットフォーム */
-            <form onSubmit={handleResetPassword} className="px-6 py-6 space-y-4">
+            <div className="px-7 py-8 space-y-5">
               <div>
-                <p className="text-sm font-semibold text-gray-700 mb-1">パスワードをリセット</p>
-                <p className="text-xs text-gray-500">登録済みのメールアドレスにリセット用リンクを送信します。</p>
+                <p className="text-base font-bold text-gray-800">パスワードをリセット</p>
+                <p className="text-xs text-gray-500 mt-1">登録済みのメールアドレスにリセット用リンクを送信します。</p>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  メールアドレス
-                </label>
-                <input
-                  type="email"
-                  value={resetEmail}
-                  onChange={(e) => setResetEmail(e.target.value)}
-                  required
-                  autoComplete="email"
-                  placeholder="you@example.com"
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
-                />
-              </div>
+              <form onSubmit={handleResetPassword} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                    メールアドレス
+                  </label>
+                  <input
+                    type="email"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    required
+                    autoComplete="email"
+                    placeholder="you@example.com"
+                    className={inputClass}
+                  />
+                </div>
 
-              {error && (
-                <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5">
-                  {error}
-                </p>
-              )}
-              {successMsg && (
-                <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
-                  {successMsg}
-                </p>
-              )}
+                {error && (
+                  <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5">
+                    {error}
+                  </p>
+                )}
+                {successMsg && (
+                  <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
+                    {successMsg}
+                  </p>
+                )}
 
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors"
-              >
-                {isSubmitting ? "送信中..." : "リセットメールを送信"}
-              </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full text-white text-sm font-semibold py-2.5 rounded-xl transition disabled:opacity-50"
+                  style={{ background: "linear-gradient(135deg, #8B5CF6 0%, #6C3CE1 100%)" }}
+                >
+                  {isSubmitting ? "送信中..." : "リセットメールを送信"}
+                </button>
+              </form>
 
               <button
                 type="button"
                 onClick={closeResetView}
-                className="w-full text-xs text-gray-500 hover:text-gray-700 transition-colors py-1"
+                className="w-full text-xs text-gray-400 hover:text-gray-600 transition py-1"
               >
                 ← ログインに戻る
               </button>
-            </form>
+            </div>
+
           ) : (
             /* ログイン／新規登録フォーム */
-            <form onSubmit={handleSubmit} className="px-6 py-6 space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  メールアドレス
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  autoComplete="email"
-                  placeholder="you@example.com"
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
-                />
+            <>
+              {/* タブ */}
+              <div className="flex border-b border-gray-100">
+                <button
+                  onClick={() => handleTabChange("login")}
+                  className={`flex-1 py-4 text-sm font-semibold transition-colors ${
+                    tab === "login"
+                      ? "text-violet-700 border-b-2 border-violet-600"
+                      : "text-gray-400 hover:text-gray-600"
+                  }`}
+                >
+                  ログイン
+                </button>
+                <button
+                  onClick={() => handleTabChange("signup")}
+                  className={`flex-1 py-4 text-sm font-semibold transition-colors ${
+                    tab === "signup"
+                      ? "text-violet-700 border-b-2 border-violet-600"
+                      : "text-gray-400 hover:text-gray-600"
+                  }`}
+                >
+                  新規登録
+                </button>
               </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-medium text-gray-600">
-                    パスワード{tab === "signup" && <span className="text-gray-400 font-normal ml-1">（6文字以上）</span>}
+              <form onSubmit={handleSubmit} className="px-7 py-7 space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                    メールアドレス
                   </label>
-                  {tab === "login" && (
-                    <button
-                      type="button"
-                      onClick={openResetView}
-                      className="text-xs text-indigo-500 hover:text-indigo-700 transition-colors"
-                    >
-                      パスワードを忘れた方はこちら
-                    </button>
-                  )}
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    autoComplete="email"
+                    placeholder="you@example.com"
+                    className={inputClass}
+                  />
                 </div>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  autoComplete={tab === "login" ? "current-password" : "new-password"}
-                  placeholder="••••••••"
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
-                />
-              </div>
 
-              {error && (
-                <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5">
-                  {error}
-                </p>
-              )}
-              {successMsg && (
-                <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
-                  {successMsg}
-                </p>
-              )}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-medium text-gray-600">
+                      パスワード
+                      {tab === "signup" && (
+                        <span className="text-gray-400 font-normal ml-1">（6文字以上）</span>
+                      )}
+                    </label>
+                    {tab === "login" && (
+                      <button
+                        type="button"
+                        onClick={openResetView}
+                        className="text-xs text-violet-500 hover:text-violet-700 transition"
+                      >
+                        パスワードを忘れた方はこちら
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    autoComplete={tab === "login" ? "current-password" : "new-password"}
+                    placeholder="••••••••"
+                    className={inputClass}
+                  />
+                </div>
 
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors"
-              >
-                {isSubmitting
-                  ? "処理中..."
-                  : tab === "login"
-                    ? "ログイン"
-                    : "アカウントを作成"}
-              </button>
-            </form>
+                {error && (
+                  <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5">
+                    {error}
+                  </p>
+                )}
+                {successMsg && (
+                  <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
+                    {successMsg}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full text-white text-sm font-semibold py-2.5 rounded-xl transition disabled:opacity-50 mt-1"
+                  style={{ background: "linear-gradient(135deg, #8B5CF6 0%, #6C3CE1 100%)" }}
+                >
+                  {isSubmitting
+                    ? "処理中..."
+                    : tab === "login"
+                      ? "ログイン"
+                      : "アカウントを作成"}
+                </button>
+              </form>
+            </>
           )}
         </div>
       </div>

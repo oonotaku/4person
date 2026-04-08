@@ -280,7 +280,7 @@ function HomeContent() {
 
   // ─── ラベル ────────────────────────────────────────────
   const L = {
-    title: lang === "ja" ? "4人格 壁打ちAI" : "4-Persona Debate AI",
+    title: "FRICTION",
     placeholder:
       lang === "ja"
         ? "テーマを入力してください（例：SaaSプロダクトをB2Cに転換する）"
@@ -301,13 +301,16 @@ function HomeContent() {
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       {/* ヘッダー */}
-      <header className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200 shadow-sm">
-        <h1 className="text-lg font-bold text-gray-800 tracking-tight">{L.title}</h1>
+      <header
+        className="flex items-center justify-between px-4 py-3 shadow-sm"
+        style={{ background: "linear-gradient(135deg, #6C3CE1 0%, #1A1A4E 100%)" }}
+      >
+        <h1 className="text-xl font-black text-white tracking-tight">{L.title}</h1>
         <div className="flex items-center gap-2">
           {messages.length > 0 && (
             <button
               onClick={startNewChat}
-              className="text-sm px-3 py-1.5 rounded-full border border-indigo-300 bg-white hover:bg-indigo-50 transition-colors font-medium text-indigo-600"
+              className="text-sm px-3 py-1.5 rounded-full border border-white/30 hover:bg-white/15 transition-colors font-medium text-white/90"
             >
               {L.backToList}
             </button>
@@ -315,14 +318,14 @@ function HomeContent() {
           {/* 言語トグル */}
           <button
             onClick={() => setLang((l) => (l === "ja" ? "en" : "ja"))}
-            className="text-sm px-3 py-1.5 rounded-full border border-gray-300 bg-white hover:bg-gray-100 transition-colors font-medium text-gray-600"
+            className="text-sm px-3 py-1.5 rounded-full border border-white/30 hover:bg-white/15 transition-colors font-medium text-white/80"
           >
             {lang === "ja" ? "EN" : "JA"}
           </button>
           {/* ログアウト */}
           <button
             onClick={signOut}
-            className="text-sm px-3 py-1.5 rounded-full border border-gray-300 bg-white hover:bg-gray-100 transition-colors font-medium text-gray-500"
+            className="text-sm px-3 py-1.5 rounded-full border border-white/30 hover:bg-white/15 transition-colors font-medium text-white/80"
             title={user?.email ?? ""}
           >
             {lang === "ja" ? "ログアウト" : "Sign out"}
