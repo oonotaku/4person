@@ -18,6 +18,7 @@ interface Message {
   content: string;
   target: Persona[] | "all";
   timestamp: Date;
+  isIntervention?: boolean;
 }
 
 // ─── 人格メタデータ ───────────────────────────────────────
@@ -61,7 +62,9 @@ interface DebateResponse {
     persona: Persona;
     content: string;
     isMain: boolean;
+    isIntervention?: boolean;
   }[];
+  interventionOccurred?: boolean;
 }
 
 // ─── メインコンポーネント ──────────────────────────────────
@@ -73,6 +76,7 @@ export default function ChatInterface() {
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [pastSessions, setPastSessions] = useState<DbSession[]>([]);
+  const [prevIntervened, setPrevIntervened] = useState(false);
 
   // 議論終了フロー
   const [showDoneConfirm, setShowDoneConfirm] = useState(false);
@@ -128,6 +132,7 @@ export default function ChatInterface() {
       setSessionId(id);
       setSummary(null);
       setSummaryError(null);
+      setPrevIntervened(false);
     } catch (e) {
       console.error("[loadSession error]", e);
     }
@@ -142,6 +147,7 @@ export default function ChatInterface() {
     setSummary(null);
     setSummaryError(null);
     setShowDoneConfirm(false);
+    setPrevIntervened(false);
   }
 
   // サマリー生成（リトライでも呼び出せる）
@@ -248,12 +254,14 @@ export default function ChatInterface() {
           userMessage: isFirstMessage ? null : text,
           language: lang,
           sessionId: currentSessionId,
+          wasInterventionPrevious: prevIntervened,
         }),
       });
 
       if (!res.ok) throw new Error(`API error: ${res.status}`);
 
       const data: DebateResponse = await res.json();
+      setPrevIntervened(!!data.interventionOccurred);
 
       // 順番に表示（300ms間隔）
       for (let i = 0; i < data.responses.length; i++) {
@@ -268,6 +276,7 @@ export default function ChatInterface() {
                 content: r.content,
                 target: "all",
                 timestamp: new Date(),
+                isIntervention: r.isIntervention,
               },
             ]);
             resolve();
@@ -465,11 +474,19 @@ export default function ChatInterface() {
           return (
             <div key={msg.id} className="flex justify-start">
               <div className="max-w-[80%] sm:max-w-[65%]">
-                <p className={`text-xs mb-1 ml-1 font-semibold ${meta.colorClass}`}>
+                <p className={`text-xs mb-1 ml-1 font-semibold ${meta.colorClass} flex items-center gap-1`}>
                   {meta.emoji} {meta.name[lang]}
+                  {msg.isIntervention && (
+                    <span
+                      title={lang === "ja" ? "自動介入あり" : "Auto intervention"}
+                      className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-300"
+                    >
+                      ⚡ {lang === "ja" ? "介入" : "Intervened"}
+                    </span>
+                  )}
                 </p>
                 <div
-                  className={`${meta.bgClass} border ${meta.borderClass} px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed shadow-sm text-gray-800`}
+                  className={`${meta.bgClass} border ${msg.isIntervention ? "border-amber-400 ring-1 ring-amber-300" : meta.borderClass} px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed shadow-sm text-gray-800`}
                 >
                   {msg.content}
                 </div>

@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect } from "react";
 import { createSession, getSessions, getSession, getMessages, saveMessage } from "@/lib/db";
 import type { Session as DbSession } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
+import AuthGuard from "@/components/AuthGuard";
 
 // ─── 型定義 ───────────────────────────────────────────────
 type Persona = "affirmer" | "critic" | "observer" | "synthesizer";
@@ -68,7 +70,8 @@ interface DebateResponse {
 }
 
 // ─── メインコンポーネント ──────────────────────────────────
-export default function Home() {
+function HomeContent() {
+  const { user, signOut } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [lang, setLang] = useState<Language>("ja");
@@ -84,12 +87,13 @@ export default function Home() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // 過去のセッション一覧を取得
+  // 過去のセッション一覧を取得（ログイン中のユーザーのみ）
   useEffect(() => {
-    getSessions()
+    if (!user) return;
+    getSessions(user.id)
       .then((data) => setPastSessions((data as DbSession[]) ?? []))
       .catch((e) => console.error("[getSessions error]", e));
-  }, []);
+  }, [user]);
 
   // ターゲットトグル
   function toggleTarget(p: Persona) {
@@ -175,7 +179,7 @@ export default function Home() {
     let currentSessionId = sessionId;
     if (isFirstMessage) {
       try {
-        const session = await createSession(theme, lang);
+        const session = await createSession(theme, lang, user?.id);
         currentSessionId = session.id;
         setSessionId(session.id);
       } catch (e) {
@@ -242,8 +246,8 @@ export default function Home() {
       }
 
       // 過去セッション一覧を更新
-      if (isFirstMessage) {
-        getSessions()
+      if (isFirstMessage && user) {
+        getSessions(user.id)
           .then((data) => setPastSessions((data as DbSession[]) ?? []))
           .catch(() => {});
       }
@@ -314,6 +318,14 @@ export default function Home() {
             className="text-sm px-3 py-1.5 rounded-full border border-gray-300 bg-white hover:bg-gray-100 transition-colors font-medium text-gray-600"
           >
             {lang === "ja" ? "EN" : "JA"}
+          </button>
+          {/* ログアウト */}
+          <button
+            onClick={signOut}
+            className="text-sm px-3 py-1.5 rounded-full border border-gray-300 bg-white hover:bg-gray-100 transition-colors font-medium text-gray-500"
+            title={user?.email ?? ""}
+          >
+            {lang === "ja" ? "ログアウト" : "Sign out"}
           </button>
         </div>
       </header>
@@ -543,5 +555,13 @@ export default function Home() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <AuthGuard>
+      <HomeContent />
+    </AuthGuard>
   );
 }
