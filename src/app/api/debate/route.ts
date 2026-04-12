@@ -43,7 +43,8 @@ function getSystemPrompt(
 ## 発言ルール
 - 具体的なアイデアを2〜3案、番号付きで提示する
 - 各案に1文の根拠を添える（市場ニーズ・差別化ポイントなど）
-- 調査者から「競合あり・障壁あり」の問い返しを受けた場合は、差別化案を提示する
+- 調査者から「競合あり・障壁あり」の結果を受けた場合、差別化案を2〜3案自発的に提示する
+- ユーザーから「別の案」「他のアイデアは？」「違う視点で」等の追加提案依頼が来た場合、新たに2〜3案を追加提示する
 - 感情的な励まし・根拠のない楽観はNG
 
 ## 制約
@@ -61,9 +62,18 @@ ${langInstruction}`,
 ## 発言ルール
 - 発案者の提示した案を明示的に参照した上で調査結果を述べる
 - 検索結果に基づいた事実ベースの発言のみ。憶測はNG
-- 競合・法規制・参入障壁が発見された場合：具体的な数字・事実を挙げて客観的に指摘する。「どうしますか？」などユーザーへの問い返しは絶対にしない
-- 発言の締めは「以上が現時点の調査結果です。」など事実報告で終わる
-- 3〜5文以内に収める
+- 3〜5文以内でレポートする（以下の選択肢行は文字数に含めない）
+- 競合・法規制・参入障壁が発見された場合：
+  ① 具体的な数字・事実を挙げて客観的に指摘する
+  ② レポートの末尾に必ず以下の1行を追加する：
+  「この結果を踏まえて、どうしますか？ ① この案の差別化を考える ② 別の案に絞る ③ このまま次のフェーズに進む」
+- 問題が見つからない場合：その旨を伝え「いつでも次のフェーズへ進めます。」と添える
+- ユーザーから「別の視点で調査して」「もっと詳しく」「再調査して」等の追加調査依頼が来た場合：web_searchを再実行して追加レポートを返す
+
+## 決断検出（必須・省略不可）
+ユーザーの直近の発言を分析し、発言の最後の行に必ず以下のいずれか1つだけを出力すること：
+ユーザーが1案を明示的に選択・決断した場合（例：「①で進める」「案Aにします」「これで行きます」「③ このまま次へ」「この案で決めた」） → <<<IS_DECIDED>>>
+まだ検討中・追加調査中・選択肢提示直後・初回レポートの場合 → <<<NOT_DECIDED>>>
 
 ## 制約
 ${noTagInstruction}
@@ -277,7 +287,7 @@ async function callClaude(
 async function callClaudeWithSearch(
   language: "ja" | "en",
   messages: { role: "user" | "assistant"; content: string }[]
-): Promise<{ content: string; needsClarification: boolean }> {
+): Promise<{ content: string; isDecided: boolean }> {
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: 1500,
@@ -287,13 +297,19 @@ async function callClaudeWithSearch(
   });
 
   // テキストブロックをすべて結合
-  const content = response.content
+  const rawText = response.content
     .filter((b) => b.type === "text")
     .map((b) => (b as { type: "text"; text: string }).text)
     .join("\n")
     .trim();
 
-  return { content, needsClarification: false };
+  const isDecided = rawText.includes("<<<IS_DECIDED>>>");
+  const content = rawText
+    .replace("<<<IS_DECIDED>>>", "")
+    .replace("<<<NOT_DECIDED>>>", "")
+    .trim();
+
+  return { content, isDecided };
 }
 
 // ─── DB保存（失敗しても議論は続行） ─────────────────────────
@@ -454,9 +470,12 @@ export async function POST(request: Request) {
         { role: "user", content: baseContent },
       ];
 
+      let isDecidedByResearcher = false;
+
       for (const persona of respondingPersonas) {
         if (persona === "researcher") {
-          const { content: researcherContent } = await callClaudeWithSearch(language, chainMessages);
+          const { content: researcherContent, isDecided } = await callClaudeWithSearch(language, chainMessages);
+          isDecidedByResearcher = isDecided;
           results.push({ persona, content: researcherContent, isMain: true });
           await dbSaveMessage(sessionId, persona as Speaker, researcherContent);
           chainMessages.push({ role: "assistant", content: `[${persona}] ${researcherContent}` });
@@ -489,7 +508,9 @@ export async function POST(request: Request) {
         }
       }
 
-      return Response.json({ responses: results });
+      // Phase 1 では調査者の is_decided を phaseCompleted として返す
+      const phaseCompleted = phase === 1 ? isDecidedByResearcher : false;
+      return Response.json({ responses: results, phaseCompleted });
     }
 
     // ─── 全員への発言（現フェーズの人格が反応） ───────────────
@@ -551,13 +572,13 @@ export async function POST(request: Request) {
             ? "調査者として、発案者のアイデアについてWeb検索で競合・市場規模・法規制を調査してレポートせよ。"
             : "As the Researcher, search the web for competitors, market size, and regulations related to the Proposer's ideas and report your findings.",
       });
-      const { content: researcherContent } = await callClaudeWithSearch(language, chainMessages);
+      const { content: researcherContent, isDecided } = await callClaudeWithSearch(language, chainMessages);
       results.push({ persona: "researcher", content: researcherContent, isMain: true });
       await dbSaveMessage(sessionId, "researcher", researcherContent);
 
       return Response.json({
         responses: results,
-        phaseCompleted: true,
+        phaseCompleted: isDecided,
       });
     }
 
