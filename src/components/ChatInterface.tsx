@@ -173,7 +173,7 @@ export default function ChatInterface() {
       setSummaryError(null);
       setPrevIntervened(false);
       setShowNextPhaseButton(false);
-      setNeedsClarification(false);
+
 
       // テーマを設定
       const s = sessionData as DbSession | null;
@@ -205,7 +205,6 @@ export default function ChatInterface() {
     setCurrentPhase(1);
     setTheme("");
     setShowNextPhaseButton(false);
-    setNeedsClarification(false);
   }
 
   // サマリー生成
@@ -266,7 +265,6 @@ export default function ChatInterface() {
     const nextPhase = (currentPhase + 1) as Phase;
     setCurrentPhase(nextPhase);
     setShowNextPhaseButton(false);
-    setNeedsClarification(false);
     setIsLoading(true);
 
     if (sessionId) {
@@ -345,7 +343,6 @@ export default function ChatInterface() {
 
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
-    setNeedsClarification(false);
     setIsLoading(true);
 
     // セッションIDを確定（初回のみ作成）

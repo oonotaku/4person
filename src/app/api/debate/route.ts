@@ -551,7 +551,7 @@ export async function POST(request: Request) {
             ? "調査者として、発案者のアイデアについてWeb検索で競合・市場規模・法規制を調査してレポートせよ。"
             : "As the Researcher, search the web for competitors, market size, and regulations related to the Proposer's ideas and report your findings.",
       });
-      const { content: researcherContent, needsClarification } = await callClaudeWithSearch(language, chainMessages);
+      const { content: researcherContent } = await callClaudeWithSearch(language, chainMessages);
       results.push({ persona: "researcher", content: researcherContent, isMain: true });
       await dbSaveMessage(sessionId, "researcher", researcherContent);
 
