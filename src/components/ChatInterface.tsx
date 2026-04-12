@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { createSession, getSessions, getSession, getMessages, saveMessage, updateSessionPhase } from "@/lib/db";
+import { createSession, getSessions, getSession, getMessages, saveMessage, updateSessionPhase, updateDecidedIdeaTitle } from "@/lib/db";
 import { isDoneMessage } from "@/lib/utils/messageHandler";
 import type { Session as DbSession } from "@/lib/supabase";
 import type { Summary } from "@/types/discussion";
@@ -104,6 +104,17 @@ function stripResearcherChoiceText(content: string): string {
   return content.replace(/この結果を踏まえて、どうしますか？[\s\S]*$/, "").trim();
 }
 
+// 調査者の最終判定テキストを抽出
+function extractResearcherVerdict(messages: { speaker: string; content: string }[]): string {
+  const msgs = messages.filter((m) => m.speaker === "researcher");
+  const last = msgs[msgs.length - 1];
+  if (!last) return "";
+  if (last.content.includes("勝てる余地あり")) return "勝てる余地あり";
+  if (last.content.includes("勝てる余地は限定的")) return "勝てる余地は限定的";
+  if (last.content.includes("参入障壁が高く厳しい")) return "参入障壁が高く厳しい";
+  return "";
+}
+
 // ─── メインコンポーネント ──────────────────────────────────
 export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -120,6 +131,12 @@ export default function ChatInterface() {
   const [theme, setTheme] = useState<string>("");
   const [showNextPhaseButton, setShowNextPhaseButton] = useState(false);
   const [needsChoice, setNeedsChoice] = useState(false);
+
+  // Phase 1 決定アイデア管理
+  const [decidedIdeaTitle, setDecidedIdeaTitle] = useState<string | null>(null);
+  const [showDecideModal, setShowDecideModal] = useState(false);
+  const [decideTitleInput, setDecideTitleInput] = useState("");
+  const [showPhase1Summary, setShowPhase1Summary] = useState(false);
 
   // 議論終了フロー
   const [showDoneConfirm, setShowDoneConfirm] = useState(false);
@@ -181,11 +198,16 @@ export default function ChatInterface() {
       setPrevIntervened(false);
       setShowNextPhaseButton(false);
       setNeedsChoice(false);
+      setShowDecideModal(false);
+      setShowPhase1Summary(false);
 
 
       // テーマを設定
       const s = sessionData as DbSession | null;
       if (s?.theme) setTheme(s.theme);
+
+      // decided_idea_title を復元
+      if (s?.decided_idea_title) setDecidedIdeaTitle(s.decided_idea_title);
 
       // フェーズをDBから取得。なければメッセージから推定
       const dbPhase = s?.current_phase as Phase | undefined;
@@ -214,6 +236,10 @@ export default function ChatInterface() {
     setTheme("");
     setShowNextPhaseButton(false);
     setNeedsChoice(false);
+    setDecidedIdeaTitle(null);
+    setDecideTitleInput("");
+    setShowDecideModal(false);
+    setShowPhase1Summary(false);
   }
 
   // サマリー生成
@@ -433,8 +459,9 @@ export default function ChatInterface() {
     setNeedsChoice(false);
 
     if (choice === 3) {
-      // APIを呼ばずに次のフェーズボタンを表示
-      setShowNextPhaseButton(true);
+      // タイトル入力モーダルを表示（APIは呼ばない）
+      setDecideTitleInput("");
+      setShowDecideModal(true);
       return;
     }
 
@@ -498,6 +525,19 @@ export default function ChatInterface() {
     setIsLoading(false);
   }
 
+  // タイトル入力モーダルの確定処理
+  async function handleConfirmDecide() {
+    const title = decideTitleInput.trim() || (lang === "ja" ? "（未入力）" : "(Untitled)");
+    setDecidedIdeaTitle(title);
+    setShowDecideModal(false);
+    if (sessionId) {
+      updateDecidedIdeaTitle(sessionId, title).catch((e) =>
+        console.error("[updateDecidedIdeaTitle error]", e)
+      );
+    }
+    setShowNextPhaseButton(true);
+  }
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
@@ -540,6 +580,74 @@ export default function ChatInterface() {
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
+      {/* タイトル入力モーダル（③ボタン押下時） */}
+      {showDecideModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <h2 className="text-base font-bold text-gray-800">
+              {lang === "ja" ? "決定した案のタイトルを入力してください" : "Enter the title of your chosen idea"}
+            </h2>
+            <input
+              type="text"
+              value={decideTitleInput}
+              onChange={(e) => setDecideTitleInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleConfirmDecide(); }}
+              autoFocus
+              placeholder={lang === "ja" ? "例：日本市場向けSaaS × 中小企業" : "e.g., SaaS for SMBs in Japan"}
+              className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            <button
+              onClick={handleConfirmDecide}
+              className="w-full bg-blue-700 hover:bg-blue-800 text-white text-sm font-bold py-2.5 rounded-xl transition-colors"
+            >
+              {lang === "ja" ? "決定してPhase 2へ進む →" : "Confirm & Proceed to Phase 2 →"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 1サマリーポップアップ */}
+      {showPhase1Summary && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
+            <div className="px-5 py-4 bg-blue-700">
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                📋 {lang === "ja" ? "Phase 1 決定アイデア" : "Phase 1 Chosen Idea"}
+              </h3>
+            </div>
+            <div className="px-5 py-5 space-y-4">
+              <div>
+                <p className="text-[10px] font-bold text-blue-700 uppercase tracking-wider mb-1">
+                  {lang === "ja" ? "決定案" : "Chosen Idea"}
+                </p>
+                <p className="text-base font-bold text-gray-900 flex items-start gap-1.5">
+                  <span>🎯</span>
+                  <span>{decidedIdeaTitle}</span>
+                </p>
+              </div>
+              <div className="border-t border-gray-100" />
+              <div>
+                <p className="text-[10px] font-bold text-blue-700 uppercase tracking-wider mb-1">
+                  {lang === "ja" ? "調査者の最終判定" : "Researcher's Verdict"}
+                </p>
+                <p className="text-sm text-gray-800 flex items-center gap-1.5">
+                  <span>✅</span>
+                  <span>{extractResearcherVerdict(messages) || "—"}</span>
+                </p>
+              </div>
+            </div>
+            <div className="px-5 pb-5">
+              <button
+                onClick={() => setShowPhase1Summary(false)}
+                className="w-full border border-gray-300 rounded-xl py-2 text-sm text-gray-600 hover:bg-gray-50 transition-colors font-medium"
+              >
+                {lang === "ja" ? "閉じる" : "Close"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 確認ダイアログ */}
       {showDoneConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -614,6 +722,26 @@ export default function ChatInterface() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* お題バー（議論開始後） */}
+      {messages.length > 0 && theme && (
+        <div className="flex items-center justify-between px-4 py-2 bg-blue-50 border-b border-blue-100 shrink-0 gap-3">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-xs shrink-0">📌</span>
+            <span className="text-xs font-medium text-gray-700 truncate">
+              {lang === "ja" ? "お題：" : "Topic: "}{theme}
+            </span>
+          </div>
+          {currentPhase >= 2 && decidedIdeaTitle && (
+            <button
+              onClick={() => setShowPhase1Summary(true)}
+              className="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-lg bg-white border border-blue-300 text-blue-700 hover:bg-blue-100 transition-colors"
+            >
+              📋 {lang === "ja" ? "Phase1サマリーを見る" : "View Phase 1 Summary"}
+            </button>
+          )}
         </div>
       )}
 

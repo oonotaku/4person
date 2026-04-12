@@ -67,6 +67,14 @@ export async function updateSessionPhase(sessionId: string, phase: 1 | 2 | 3) {
   if (error) throw error
 }
 
+export async function updateDecidedIdeaTitle(sessionId: string, title: string) {
+  const { error } = await supabase
+    .from('sessions')
+    .update({ decided_idea_title: title })
+    .eq('id', sessionId)
+  if (error) throw error
+}
+
 export async function saveFinalConclusion(sessionId: string, conclusion: string) {
   const { error } = await supabase
     .from('sessions')

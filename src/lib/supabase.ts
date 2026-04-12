@@ -18,6 +18,7 @@ export interface Session {
   is_completed?: boolean
   summary?: { verdict: string; verdict_reason: string; conditions: string[]; first_step: string } | null
   current_phase?: 1 | 2 | 3
+  decided_idea_title?: string | null
 }
 
 export interface Message {
