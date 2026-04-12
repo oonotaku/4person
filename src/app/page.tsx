@@ -93,6 +93,11 @@ interface DebateResponse {
   needsChoice?: boolean;
 }
 
+// 調査者の選択肢テキストを除去
+function stripResearcherChoiceText(content: string): string {
+  return content.replace(/この結果を踏まえて、どうしますか？[\s\S]*$/, "").trim();
+}
+
 // ─── メインコンポーネント ──────────────────────────────────
 function HomeContent() {
   const { user, signOut } = useAuth();
@@ -717,7 +722,7 @@ function HomeContent() {
                       {meta.emoji} {meta.name[lang]}
                     </p>
                     <div className={`${meta.bgClass} border ${meta.borderClass} px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed shadow-sm text-gray-800`}>
-                      {msg.content}
+                      {msg.speaker === "researcher" ? stripResearcherChoiceText(msg.content) : msg.content}
                     </div>
                   </div>
                 </div>

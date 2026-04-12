@@ -99,6 +99,11 @@ function inferPhase(speakers: string[]): Phase {
   return 1;
 }
 
+// 調査者の選択肢テキストを除去
+function stripResearcherChoiceText(content: string): string {
+  return content.replace(/この結果を踏まえて、どうしますか？[\s\S]*$/, "").trim();
+}
+
 // ─── メインコンポーネント ──────────────────────────────────
 export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -708,7 +713,7 @@ export default function ChatInterface() {
                     msg.isIntervention ? "border-amber-400 ring-1 ring-amber-300" : meta.borderClass
                   } px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed shadow-sm text-gray-800`}
                 >
-                  {msg.content}
+                  {msg.speaker === "researcher" ? stripResearcherChoiceText(msg.content) : msg.content}
                 </div>
               </div>
             </div>
