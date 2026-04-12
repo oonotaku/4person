@@ -59,6 +59,14 @@ export async function getMessages(sessionId: string) {
   return data
 }
 
+export async function updateSessionPhase(sessionId: string, phase: 1 | 2 | 3) {
+  const { error } = await supabase
+    .from('sessions')
+    .update({ current_phase: phase })
+    .eq('id', sessionId)
+  if (error) throw error
+}
+
 export async function saveFinalConclusion(sessionId: string, conclusion: string) {
   const { error } = await supabase
     .from('sessions')
