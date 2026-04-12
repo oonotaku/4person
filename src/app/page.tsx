@@ -453,9 +453,9 @@ function HomeContent() {
 
       {isBeforeSession ? (
         /* ─── ランディング画面（セッション未開始） ─────────── */
-        <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center px-4 py-10">
+        <div className="flex-1 overflow-y-auto flex flex-col items-center px-4 py-10">
           {/* キャッチコピー */}
-          <p className="text-gray-400 text-xs font-semibold tracking-widest uppercase mb-4">
+          <p className="text-gray-400 text-xs font-semibold tracking-widest uppercase mb-4 mt-8">
             AI Multi-Agent Debate
           </p>
           <h2 className="text-gray-900 text-2xl sm:text-3xl font-black text-center mb-10 leading-snug">
