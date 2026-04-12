@@ -91,7 +91,7 @@ export default function ResetPasswordPage() {
                 </p>
                 <button
                   onClick={() => router.replace("/auth")}
-                  className="w-full text-sm text-indigo-600 hover:text-indigo-800 transition-colors font-medium py-1"
+                  className="w-full text-sm text-blue-700 hover:text-blue-900 transition-colors font-medium py-1"
                 >
                   ← ログインページに戻る
                 </button>
@@ -111,7 +111,7 @@ export default function ResetPasswordPage() {
                     required
                     autoComplete="new-password"
                     placeholder="••••••••"
-                    className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+                    className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
 
@@ -126,7 +126,7 @@ export default function ResetPasswordPage() {
                     required
                     autoComplete="new-password"
                     placeholder="••••••••"
-                    className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+                    className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
 
@@ -139,7 +139,7 @@ export default function ResetPasswordPage() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors"
+                  className="w-full bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors"
                 >
                   {isSubmitting ? "更新中..." : "パスワードを更新する"}
                 </button>

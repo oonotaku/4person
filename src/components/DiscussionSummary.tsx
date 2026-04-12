@@ -66,8 +66,8 @@ export default function DiscussionSummary({ summary, lang = "ja", isLoading, err
   // ローディング表示
   if (isLoading) {
     return (
-      <div className="mt-4 rounded-2xl border border-indigo-200 bg-white shadow-md overflow-hidden">
-        <div className="flex items-center gap-2 px-5 py-3 bg-indigo-600">
+      <div className="mt-4 rounded-2xl border border-blue-300 bg-white shadow-md overflow-hidden">
+        <div className="flex items-center gap-2 px-5 py-3 bg-blue-700">
           <span className="flex gap-1">
             <span className="w-2 h-2 bg-white/70 rounded-full animate-bounce [animation-delay:0ms]" />
             <span className="w-2 h-2 bg-white/70 rounded-full animate-bounce [animation-delay:150ms]" />
@@ -76,11 +76,11 @@ export default function DiscussionSummary({ summary, lang = "ja", isLoading, err
           <h3 className="text-sm font-bold text-white">{L.loading}</h3>
         </div>
         <div className="px-5 py-4 space-y-3">
-          <p className="text-xs text-indigo-500">{L.loadingDetail}</p>
+          <p className="text-xs text-blue-600">{L.loadingDetail}</p>
           <div className="space-y-2">
-            <div className="h-4 bg-indigo-50 rounded-lg animate-pulse w-full" />
-            <div className="h-4 bg-indigo-50 rounded-lg animate-pulse w-4/5" />
-            <div className="h-4 bg-indigo-50 rounded-lg animate-pulse w-3/4" />
+            <div className="h-4 bg-blue-50 rounded-lg animate-pulse w-full" />
+            <div className="h-4 bg-blue-50 rounded-lg animate-pulse w-4/5" />
+            <div className="h-4 bg-blue-50 rounded-lg animate-pulse w-3/4" />
           </div>
           <div className="border-t border-gray-100 pt-3 space-y-2">
             <div className="h-3 bg-gray-100 rounded-lg animate-pulse w-full" />
@@ -108,7 +108,7 @@ export default function DiscussionSummary({ summary, lang = "ja", isLoading, err
           {onRetry && (
             <button
               onClick={onRetry}
-              className="flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
+              className="flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white transition-colors"
             >
               <RetryIcon />
               {L.retry}
@@ -146,9 +146,9 @@ export default function DiscussionSummary({ summary, lang = "ja", isLoading, err
   }
 
   return (
-    <div className="mt-4 rounded-2xl border border-indigo-200 bg-white shadow-md overflow-hidden print:shadow-none print:border-gray-300">
+    <div className="mt-4 rounded-2xl border border-blue-300 bg-white shadow-md overflow-hidden print:shadow-none print:border-gray-300">
       {/* ヘッダー */}
-      <div className="flex items-center justify-between px-5 py-3 bg-indigo-600 print:bg-white print:border-b print:border-gray-300">
+      <div className="flex items-center justify-between px-5 py-3 bg-blue-700 print:bg-white print:border-b print:border-gray-300">
         <h3 className="text-sm font-bold text-white flex items-center gap-1.5 print:text-gray-900">
           <span aria-hidden="true">📋</span>
           {L.title}
@@ -187,7 +187,7 @@ export default function DiscussionSummary({ summary, lang = "ja", isLoading, err
         {/* 結論 */}
         <section>
           <SectionLabel text={L.conclusion} icon="💡" />
-          <p className="mt-2 text-sm text-gray-800 leading-relaxed bg-indigo-50 rounded-xl px-4 py-3 border border-indigo-100">
+          <p className="mt-2 text-sm text-gray-800 leading-relaxed bg-blue-50 rounded-xl px-4 py-3 border border-blue-100">
             {summary.conclusion}
           </p>
         </section>
@@ -200,7 +200,7 @@ export default function DiscussionSummary({ summary, lang = "ja", isLoading, err
           <ul className="mt-2 space-y-2">
             {summary.main_points.map((point, i) => (
               <li key={i} className="flex gap-2.5 text-sm text-gray-800">
-                <span className="mt-0.5 w-4 h-4 shrink-0 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-bold">
+                <span className="mt-0.5 w-4 h-4 shrink-0 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-bold">
                   {i + 1}
                 </span>
                 <span className="leading-relaxed">{point}</span>
@@ -218,9 +218,9 @@ export default function DiscussionSummary({ summary, lang = "ja", isLoading, err
             {summary.next_actions.map((action, i) => (
               <li
                 key={i}
-                className="flex gap-2.5 text-sm text-gray-800 p-3 rounded-xl border border-gray-100 bg-gray-50 hover:bg-indigo-50 hover:border-indigo-100 transition-colors"
+                className="flex gap-2.5 text-sm text-gray-800 p-3 rounded-xl border border-gray-100 bg-gray-50 hover:bg-blue-50 hover:border-blue-100 transition-colors"
               >
-                <span className="shrink-0 text-xs font-bold text-indigo-500 mt-0.5 w-4 text-right">
+                <span className="shrink-0 text-xs font-bold text-blue-600 mt-0.5 w-4 text-right">
                   {i + 1}.
                 </span>
                 <span className="leading-relaxed">{action}</span>
@@ -237,7 +237,7 @@ export default function DiscussionSummary({ summary, lang = "ja", isLoading, err
 
 function SectionLabel({ text, icon }: { text: string; icon: string }) {
   return (
-    <p className="text-xs font-bold text-indigo-600 flex items-center gap-1.5 uppercase tracking-wide">
+    <p className="text-xs font-bold text-blue-700 flex items-center gap-1.5 uppercase tracking-wide">
       <span aria-hidden="true">{icon}</span>
       {text}
     </p>

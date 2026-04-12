@@ -68,9 +68,9 @@ const PERSONAS: Record<
   },
   synthesizer: {
     emoji: "⚖️",
-    colorClass: "text-indigo-700",
-    bgClass: "bg-indigo-50",
-    borderClass: "border-indigo-300",
+    colorClass: "text-blue-800",
+    bgClass: "bg-blue-50",
+    borderClass: "border-blue-400",
     name: { ja: "統合者", en: "Synthesizer" },
   },
 };
@@ -433,7 +433,7 @@ function HomeContent() {
       {/* ─── ヘッダー ─────────────────────────────────────── */}
       <header
         className="flex items-center justify-between px-4 py-3 shrink-0"
-        style={{ background: "linear-gradient(135deg, #4F46E5 0%, #1E1B4B 100%)" }}
+        style={{ background: "linear-gradient(135deg, #1E3A8A 0%, #0F172A 100%)" }}
       >
         <h1 className="text-xl font-black text-white tracking-tight">{L.title}</h1>
         <div className="flex items-center gap-2">
@@ -485,10 +485,10 @@ function HomeContent() {
                 )}
                 <div className={`flex flex-col items-center px-5 py-3 rounded-2xl border transition-all ${
                   p === 1
-                    ? "bg-indigo-600 border-indigo-500 shadow-lg shadow-indigo-200"
+                    ? "bg-blue-700 border-blue-600 shadow-lg shadow-blue-300"
                     : "bg-white border-gray-200"
                 }`}>
-                  <span className={`text-[10px] font-bold tracking-wider uppercase mb-1 ${p === 1 ? "text-indigo-200" : "text-gray-300"}`}>
+                  <span className={`text-[10px] font-bold tracking-wider uppercase mb-1 ${p === 1 ? "text-blue-300" : "text-gray-300"}`}>
                     Phase {p}
                   </span>
                   <span className={`text-sm font-bold ${p === 1 ? "text-white" : "text-gray-300"}`}>
@@ -515,12 +515,12 @@ function HomeContent() {
               onKeyDown={handleKeyDown}
               placeholder={lang === "ja" ? "あなたのアイデアを入力してください" : "Enter your idea here"}
               disabled={isLoading}
-              className="w-full bg-white border border-gray-300 text-gray-800 placeholder-gray-400 rounded-2xl px-4 py-3.5 text-sm resize-none focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 disabled:opacity-50 leading-relaxed shadow-sm"
+              className="w-full bg-white border border-gray-300 text-gray-800 placeholder-gray-400 rounded-2xl px-4 py-3.5 text-sm resize-none focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-50 leading-relaxed shadow-sm"
             />
             <button
               onClick={handleSubmit}
               disabled={isLoading || !input.trim()}
-              className="w-full mt-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-bold py-3 rounded-2xl text-sm transition-colors shadow-md"
+              className="w-full mt-3 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 text-white font-bold py-3 rounded-2xl text-sm transition-colors shadow-md"
             >
               {isLoading ? L.loading : (lang === "ja" ? "壁打ちを始める →" : "Start Debate →")}
             </button>
@@ -538,7 +538,7 @@ function HomeContent() {
                   <button
                     key={s.id}
                     onClick={() => loadSession(s.id)}
-                    className="w-full text-left px-4 py-2.5 rounded-xl bg-white hover:bg-indigo-50 border border-gray-200 transition-all group shadow-sm"
+                    className="w-full text-left px-4 py-2.5 rounded-xl bg-white hover:bg-blue-50 border border-gray-200 transition-all group shadow-sm"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm text-gray-600 group-hover:text-gray-900 truncate transition-colors">
@@ -550,7 +550,7 @@ function HomeContent() {
                             {lang === "ja" ? "完了" : "Done"}
                           </span>
                         )}
-                        <span className="text-xs text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="text-xs text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
                           {L.resume} →
                         </span>
                       </div>
@@ -578,17 +578,17 @@ function HomeContent() {
               return (
                 <div key={p} className="flex items-center">
                   {idx > 0 && (
-                    <div className={`w-10 h-0.5 mx-1 ${done ? "bg-indigo-400" : "bg-gray-200"}`} />
+                    <div className={`w-10 h-0.5 mx-1 ${done ? "bg-blue-500" : "bg-gray-200"}`} />
                   )}
                   <div className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs transition-all ${
                     active
-                      ? "bg-white shadow border border-indigo-300 text-indigo-700 font-bold"
+                      ? "bg-white shadow border border-blue-400 text-blue-800 font-bold"
                       : done
-                      ? "bg-indigo-50 text-indigo-400 border border-indigo-100 font-medium"
+                      ? "bg-blue-50 text-blue-500 border border-blue-100 font-medium"
                       : "bg-gray-50 text-gray-300 border border-gray-100"
                   }`}>
                     <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                      active ? "bg-indigo-600 text-white" : done ? "bg-indigo-300 text-white" : "bg-gray-200 text-gray-400"
+                      active ? "bg-blue-700 text-white" : done ? "bg-blue-400 text-white" : "bg-gray-200 text-gray-400"
                     }`}>{p}</span>
                     <span>{PHASE_META[p].label[lang]}</span>
                   </div>
@@ -598,7 +598,7 @@ function HomeContent() {
             {currentPhase > 1 && (
               <button
                 onClick={handleResetPhase}
-                className="absolute left-4 text-xs text-gray-400 hover:text-indigo-600 transition-colors font-medium"
+                className="absolute left-4 text-xs text-gray-400 hover:text-blue-700 transition-colors font-medium"
               >
                 ← {lang === "ja" ? "フェーズ1に戻る" : "Back to Phase 1"}
               </button>
@@ -613,10 +613,10 @@ function HomeContent() {
                   <div key={msg.id} className="flex justify-end">
                     <div className="max-w-[80%] sm:max-w-[65%]">
                       <p className="text-xs text-right text-gray-400 mb-1 mr-1">{L.you}</p>
-                      <div className="bg-indigo-600 text-white px-4 py-3 rounded-2xl rounded-tr-sm text-sm leading-relaxed shadow-sm">
+                      <div className="bg-blue-700 text-white px-4 py-3 rounded-2xl rounded-tr-sm text-sm leading-relaxed shadow-sm">
                         {msg.content}
                         {msg.target !== "all" && (
-                          <div className="mt-2 pt-2 border-t border-indigo-400 text-xs text-indigo-200 flex flex-wrap gap-1">
+                          <div className="mt-2 pt-2 border-t border-blue-500 text-xs text-blue-300 flex flex-wrap gap-1">
                             {(msg.target as Persona[]).map((p) => (
                               <span key={p}>{PERSONAS[p].emoji} {PERSONAS[p].name[lang]}</span>
                             ))}
@@ -657,7 +657,7 @@ function HomeContent() {
               <div className="flex justify-center py-2">
                 <button
                   onClick={handleNextPhase}
-                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm flex items-center gap-2"
+                  className="px-6 py-2.5 bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm flex items-center gap-2"
                 >
                   {L.nextPhaseLabel(nextPhase)}<span>→</span>
                 </button>
@@ -678,8 +678,8 @@ function HomeContent() {
             )}
 
             {summary && (
-              <div className="mt-2 rounded-2xl border border-indigo-200 bg-white shadow-md overflow-hidden">
-                <div className="px-5 py-3 bg-indigo-600">
+              <div className="mt-2 rounded-2xl border border-blue-300 bg-white shadow-md overflow-hidden">
+                <div className="px-5 py-3 bg-blue-700">
                   <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
                     <span aria-hidden="true">📋</span>
                     {lang === "ja" ? "議論のまとめ" : "Discussion Summary"}
@@ -687,22 +687,22 @@ function HomeContent() {
                 </div>
                 <div className="px-5 py-4 space-y-4">
                   <section>
-                    <p className="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-2">
+                    <p className="text-xs font-bold text-blue-700 uppercase tracking-wide mb-2">
                       💡 {lang === "ja" ? "結論" : "Conclusion"}
                     </p>
-                    <p className="text-sm text-gray-800 leading-relaxed bg-indigo-50 rounded-xl px-4 py-3 border border-indigo-100">
+                    <p className="text-sm text-gray-800 leading-relaxed bg-blue-50 rounded-xl px-4 py-3 border border-blue-100">
                       {summary.conclusion}
                     </p>
                   </section>
                   <div className="border-t border-gray-100" />
                   <section>
-                    <p className="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-2">
+                    <p className="text-xs font-bold text-blue-700 uppercase tracking-wide mb-2">
                       📌 {lang === "ja" ? "主な論点" : "Main Points"}
                     </p>
                     <ul className="space-y-2">
                       {summary.main_points.map((point, i) => (
                         <li key={i} className="flex gap-2.5 text-sm text-gray-800">
-                          <span className="mt-0.5 w-4 h-4 shrink-0 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
+                          <span className="mt-0.5 w-4 h-4 shrink-0 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
                           <span className="leading-relaxed">{point}</span>
                         </li>
                       ))}
@@ -710,13 +710,13 @@ function HomeContent() {
                   </section>
                   <div className="border-t border-gray-100" />
                   <section>
-                    <p className="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-2">
+                    <p className="text-xs font-bold text-blue-700 uppercase tracking-wide mb-2">
                       🚀 {lang === "ja" ? "次のアクション" : "Next Actions"}
                     </p>
                     <ol className="space-y-2">
                       {summary.next_actions.map((action, i) => (
                         <li key={i} className="flex gap-2.5 text-sm text-gray-800 p-3 rounded-xl border border-gray-100 bg-gray-50">
-                          <span className="shrink-0 text-xs font-bold text-indigo-500 mt-0.5 w-4 text-right">{i + 1}.</span>
+                          <span className="shrink-0 text-xs font-bold text-blue-600 mt-0.5 w-4 text-right">{i + 1}.</span>
                           <span className="leading-relaxed">{action}</span>
                         </li>
                       ))}
@@ -772,12 +772,12 @@ function HomeContent() {
                 onKeyDown={handleKeyDown}
                 placeholder={L.placeholder}
                 disabled={isLoading}
-                className="flex-1 resize-none border border-gray-300 rounded-xl px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent disabled:opacity-50 leading-relaxed"
+                className="flex-1 resize-none border border-gray-300 rounded-xl px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 leading-relaxed"
               />
               <button
                 onClick={handleSubmit}
                 disabled={isLoading || !input.trim()}
-                className="shrink-0 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors flex flex-col items-center gap-0.5 h-[60px] justify-center"
+                className="shrink-0 bg-blue-700 hover:bg-blue-800 disabled:opacity-40 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors flex flex-col items-center gap-0.5 h-[60px] justify-center"
               >
                 <span>{L.send}</span>
                 <span className="text-[10px] font-normal opacity-75">{L.sendHint}</span>

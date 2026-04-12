@@ -113,12 +113,12 @@ export default function AuthPage() {
   if (loading || user) return null;
 
   const inputClass =
-    "w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent bg-gray-50 transition";
+    "w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 transition";
 
   return (
     <div
       className="min-h-screen flex flex-col lg:flex-row"
-      style={{ background: "linear-gradient(135deg, #4F46E5 0%, #1E1B4B 100%)" }}
+      style={{ background: "linear-gradient(135deg, #1E3A8A 0%, #0F172A 100%)" }}
     >
       {/* ── 左：ブランドエリア ── */}
       <div className="flex flex-col justify-center items-center lg:items-start px-8 py-10 lg:py-0 lg:px-20 lg:w-1/2">
@@ -193,7 +193,7 @@ export default function AuthPage() {
                   type="submit"
                   disabled={isSubmitting}
                   className="w-full text-white text-sm font-semibold py-2.5 rounded-xl transition disabled:opacity-50"
-                  style={{ background: "linear-gradient(135deg, #4F46E5 0%, #3730A3 100%)" }}
+                  style={{ background: "linear-gradient(135deg, #2563EB 0%, #1E3A8A 100%)" }}
                 >
                   {isSubmitting ? "送信中..." : "リセットメールを送信"}
                 </button>
@@ -217,7 +217,7 @@ export default function AuthPage() {
                   onClick={() => handleTabChange("login")}
                   className={`flex-1 py-4 text-sm font-semibold transition-colors ${
                     tab === "login"
-                      ? "text-violet-700 border-b-2 border-violet-600"
+                      ? "text-blue-800 border-b-2 border-blue-700"
                       : "text-gray-400 hover:text-gray-600"
                   }`}
                 >
@@ -227,7 +227,7 @@ export default function AuthPage() {
                   onClick={() => handleTabChange("signup")}
                   className={`flex-1 py-4 text-sm font-semibold transition-colors ${
                     tab === "signup"
-                      ? "text-violet-700 border-b-2 border-violet-600"
+                      ? "text-blue-800 border-b-2 border-blue-700"
                       : "text-gray-400 hover:text-gray-600"
                   }`}
                 >
@@ -263,7 +263,7 @@ export default function AuthPage() {
                       <button
                         type="button"
                         onClick={openResetView}
-                        className="text-xs text-violet-500 hover:text-violet-700 transition"
+                        className="text-xs text-blue-600 hover:text-blue-800 transition"
                       >
                         パスワードを忘れた方はこちら
                       </button>
@@ -295,7 +295,7 @@ export default function AuthPage() {
                   type="submit"
                   disabled={isSubmitting}
                   className="w-full text-white text-sm font-semibold py-2.5 rounded-xl transition disabled:opacity-50 mt-1"
-                  style={{ background: "linear-gradient(135deg, #4F46E5 0%, #3730A3 100%)" }}
+                  style={{ background: "linear-gradient(135deg, #2563EB 0%, #1E3A8A 100%)" }}
                 >
                   {isSubmitting
                     ? "処理中..."

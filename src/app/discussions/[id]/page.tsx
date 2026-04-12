@@ -30,7 +30,7 @@ export default async function DiscussionPage({ params }: Props) {
       <div className="max-w-2xl mx-auto">
         <Link
           href="/"
-          className="inline-flex items-center gap-1 text-sm text-indigo-600 hover:underline mb-6"
+          className="inline-flex items-center gap-1 text-sm text-blue-700 hover:underline mb-6"
         >
           ← トップに戻る
         </Link>

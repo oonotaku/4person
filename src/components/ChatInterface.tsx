@@ -64,9 +64,9 @@ const PERSONAS: Record<
   },
   synthesizer: {
     emoji: "⚖️",
-    colorClass: "text-indigo-700",
-    bgClass: "bg-indigo-50",
-    borderClass: "border-indigo-300",
+    colorClass: "text-blue-800",
+    bgClass: "bg-blue-50",
+    borderClass: "border-blue-400",
     name: { ja: "統合者", en: "Synthesizer" },
   },
 };
@@ -488,7 +488,7 @@ export default function ChatInterface() {
               </button>
               <button
                 onClick={handleConfirmDone}
-                className="text-sm px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition-colors"
+                className="text-sm px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-medium transition-colors"
               >
                 {L.doneConfirmOk}
               </button>
@@ -504,7 +504,7 @@ export default function ChatInterface() {
           {messages.length > 0 && (
             <button
               onClick={startNewChat}
-              className="text-sm px-3 py-1.5 rounded-full border border-indigo-300 bg-white hover:bg-indigo-50 transition-colors font-medium text-indigo-600"
+              className="text-sm px-3 py-1.5 rounded-full border border-blue-400 bg-white hover:bg-blue-50 transition-colors font-medium text-blue-700"
             >
               {L.newChat}
             </button>
@@ -527,14 +527,14 @@ export default function ChatInterface() {
             return (
               <div key={p} className="flex items-center">
                 {idx > 0 && (
-                  <div className={`w-8 h-0.5 ${done ? "bg-indigo-400" : "bg-gray-200"}`} />
+                  <div className={`w-8 h-0.5 ${done ? "bg-blue-500" : "bg-gray-200"}`} />
                 )}
                 <div
                   className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
                     active
-                      ? "bg-indigo-600 text-white"
+                      ? "bg-blue-700 text-white"
                       : done
-                      ? "bg-indigo-100 text-indigo-600"
+                      ? "bg-blue-100 text-blue-700"
                       : "bg-gray-100 text-gray-400"
                   }`}
                 >
@@ -579,7 +579,7 @@ export default function ChatInterface() {
                     <button
                       key={s.id}
                       onClick={() => loadSession(s.id)}
-                      className="w-full text-left px-4 py-3 bg-white rounded-xl border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 transition-colors shadow-sm group"
+                      className="w-full text-left px-4 py-3 bg-white rounded-xl border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-colors shadow-sm group"
                     >
                       <p className="text-sm font-medium text-gray-800 truncate">{s.theme}</p>
                       <div className="flex items-center justify-between mt-0.5">
@@ -589,7 +589,7 @@ export default function ChatInterface() {
                             { year: "numeric", month: "short", day: "numeric" }
                           )}
                         </p>
-                        <span className="text-xs text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="text-xs text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
                           {L.resume} →
                         </span>
                       </div>
@@ -607,10 +607,10 @@ export default function ChatInterface() {
               <div key={msg.id} className="flex justify-end">
                 <div className="max-w-[80%] sm:max-w-[65%]">
                   <p className="text-xs text-right text-gray-400 mb-1 mr-1">{L.you}</p>
-                  <div className="bg-indigo-600 text-white px-4 py-3 rounded-2xl rounded-tr-sm text-sm leading-relaxed shadow-sm">
+                  <div className="bg-blue-700 text-white px-4 py-3 rounded-2xl rounded-tr-sm text-sm leading-relaxed shadow-sm">
                     {msg.content}
                     {msg.target !== "all" && (
-                      <div className="mt-2 pt-2 border-t border-indigo-400 text-xs text-indigo-200 flex flex-wrap gap-1">
+                      <div className="mt-2 pt-2 border-t border-blue-500 text-xs text-blue-300 flex flex-wrap gap-1">
                         {(msg.target as Persona[]).map((p) => (
                           <span key={p}>
                             {PERSONAS[p].emoji} {PERSONAS[p].name[lang]}
@@ -664,7 +664,7 @@ export default function ChatInterface() {
           <div className="flex justify-center py-2">
             <button
               onClick={handleNextPhase}
-              className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm flex items-center gap-2"
+              className="px-6 py-2.5 bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm flex items-center gap-2"
             >
               {L.nextPhaseLabel(nextPhase)}
               <span>→</span>
@@ -751,12 +751,12 @@ export default function ChatInterface() {
             onKeyDown={handleKeyDown}
             placeholder={L.placeholder}
             disabled={isLoading || isSummarizing || !!summary}
-            className="flex-1 resize-none border border-gray-300 rounded-xl px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent disabled:opacity-50 leading-relaxed"
+            className="flex-1 resize-none border border-gray-300 rounded-xl px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 leading-relaxed"
           />
           <button
             onClick={handleSubmit}
             disabled={isLoading || isSummarizing || !!summary || !input.trim()}
-            className="shrink-0 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors flex flex-col items-center gap-0.5 h-[60px] justify-center"
+            className="shrink-0 bg-blue-700 hover:bg-blue-800 disabled:opacity-40 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors flex flex-col items-center gap-0.5 h-[60px] justify-center"
           >
             <span>{L.send}</span>
             <span className="text-[10px] font-normal opacity-75">{L.sendHint}</span>
