@@ -96,19 +96,27 @@ async function synthesizeSummary(
 
   const systemPrompt =
     language === "ja"
-      ? `あなたは議論のまとめ役です。4人格それぞれの視点をもとに、議論全体の統合サマリーをJSON形式で出力してください。
+      ? `あなたは議論のまとめ役です。4人格それぞれの視点をもとに、このビジネスアイデアへの実行判断をJSON形式で出力してください。
 説明文や前置きは一切不要です。以下のJSON構造のみを返してください。
+
+verdictは必ず「実行すべき」「条件付きで実行すべき」「見送るべき」の3択から1つを選ぶこと。
+
 {
-  "conclusion": "議論全体の結論（1〜2文）",
-  "main_points": ["重要ポイント1", "重要ポイント2", "重要ポイント3"],
-  "next_actions": ["次のアクション1", "次のアクション2"]
+  "verdict": "実行すべき" | "条件付きで実行すべき" | "見送るべき",
+  "verdict_reason": "判断の理由（2〜3文）",
+  "conditions": ["このアイデアが実行に値する条件1", "条件2", "条件3"],
+  "first_step": "今週中にできる具体的なアクション1つ（動詞始まりで1文）"
 }`
-      : `You are a discussion summarizer. Based on each of the 4 persona perspectives, output an integrated summary in JSON format.
+      : `You are a discussion summarizer. Based on each of the 4 persona perspectives, output an execution verdict for this business idea in JSON format.
 Return ONLY the following JSON structure — no explanation, no preamble.
+
+verdict must be exactly one of: "Should execute" | "Execute with conditions" | "Pass for now"
+
 {
-  "conclusion": "Overall conclusion of the discussion (1-2 sentences)",
-  "main_points": ["Key point 1", "Key point 2", "Key point 3"],
-  "next_actions": ["Next action 1", "Next action 2"]
+  "verdict": "Should execute" | "Execute with conditions" | "Pass for now",
+  "verdict_reason": "Reason for the verdict (2-3 sentences)",
+  "conditions": ["Condition 1 for this idea to be worth executing", "Condition 2", "Condition 3"],
+  "first_step": "One concrete action doable this week (start with a verb, 1 sentence)"
 }`;
 
   const topicPrefix =
@@ -127,9 +135,10 @@ Return ONLY the following JSON structure — no explanation, no preamble.
   const parsed = JSON.parse(extractJson(block.text)) as Summary;
 
   if (
-    typeof parsed.conclusion !== "string" ||
-    !Array.isArray(parsed.main_points) ||
-    !Array.isArray(parsed.next_actions)
+    typeof parsed.verdict !== "string" ||
+    typeof parsed.verdict_reason !== "string" ||
+    !Array.isArray(parsed.conditions) ||
+    typeof parsed.first_step !== "string"
   ) {
     throw new Error("Invalid summary structure returned by Claude");
   }

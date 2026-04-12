@@ -77,9 +77,10 @@ const PERSONAS: Record<
 
 // ─── APIレスポンス型 ──────────────────────────────────────
 interface Summary {
-  conclusion: string;
-  main_points: string[];
-  next_actions: string[];
+  verdict: string;
+  verdict_reason: string;
+  conditions: string[];
+  first_step: string;
 }
 
 interface DebateResponse {
@@ -661,29 +662,30 @@ function HomeContent() {
               <div className="mt-2 rounded-2xl border border-blue-300 bg-white shadow-md overflow-hidden">
                 <div className="px-5 py-3 bg-blue-700">
                   <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
-                    <span aria-hidden="true">📋</span>
-                    {lang === "ja" ? "議論のまとめ" : "Discussion Summary"}
+                    <span aria-hidden="true">⚖️</span>
+                    {lang === "ja" ? "実行判断サマリー" : "Execution Verdict"}
                   </h3>
                 </div>
                 <div className="px-5 py-4 space-y-4">
                   <section>
                     <p className="text-xs font-bold text-blue-700 uppercase tracking-wide mb-2">
-                      💡 {lang === "ja" ? "結論" : "Conclusion"}
+                      ⚖️ {lang === "ja" ? "実行判断" : "Verdict"}
                     </p>
-                    <p className="text-sm text-gray-800 leading-relaxed bg-blue-50 rounded-xl px-4 py-3 border border-blue-100">
-                      {summary.conclusion}
-                    </p>
+                    <span className="inline-block px-3 py-1 rounded-full text-sm font-bold border bg-blue-50 text-blue-800 border-blue-300">
+                      {summary.verdict}
+                    </span>
+                    <p className="mt-2 text-sm text-gray-700 leading-relaxed">{summary.verdict_reason}</p>
                   </section>
                   <div className="border-t border-gray-100" />
                   <section>
                     <p className="text-xs font-bold text-blue-700 uppercase tracking-wide mb-2">
-                      📌 {lang === "ja" ? "主な論点" : "Main Points"}
+                      📋 {lang === "ja" ? "実行に値する条件" : "Conditions for Execution"}
                     </p>
                     <ul className="space-y-2">
-                      {summary.main_points.map((point, i) => (
+                      {summary.conditions.map((condition, i) => (
                         <li key={i} className="flex gap-2.5 text-sm text-gray-800">
                           <span className="mt-0.5 w-4 h-4 shrink-0 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
-                          <span className="leading-relaxed">{point}</span>
+                          <span className="leading-relaxed">{condition}</span>
                         </li>
                       ))}
                     </ul>
@@ -691,16 +693,11 @@ function HomeContent() {
                   <div className="border-t border-gray-100" />
                   <section>
                     <p className="text-xs font-bold text-blue-700 uppercase tracking-wide mb-2">
-                      🚀 {lang === "ja" ? "次のアクション" : "Next Actions"}
+                      🚀 {lang === "ja" ? "最初の一手" : "First Step"}
                     </p>
-                    <ol className="space-y-2">
-                      {summary.next_actions.map((action, i) => (
-                        <li key={i} className="flex gap-2.5 text-sm text-gray-800 p-3 rounded-xl border border-gray-100 bg-gray-50">
-                          <span className="shrink-0 text-xs font-bold text-blue-600 mt-0.5 w-4 text-right">{i + 1}.</span>
-                          <span className="leading-relaxed">{action}</span>
-                        </li>
-                      ))}
-                    </ol>
+                    <p className="text-sm text-gray-800 leading-relaxed p-3 rounded-xl border border-blue-100 bg-blue-50 font-medium">
+                      {summary.first_step}
+                    </p>
                   </section>
                 </div>
               </div>

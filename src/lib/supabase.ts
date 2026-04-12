@@ -16,7 +16,7 @@ export interface Session {
   created_at: string
   final_conclusion?: string
   is_completed?: boolean
-  summary?: { conclusion: string; main_points: string[]; next_actions: string[] } | null
+  summary?: { verdict: string; verdict_reason: string; conditions: string[]; first_step: string } | null
   current_phase?: 1 | 2 | 3
 }
 

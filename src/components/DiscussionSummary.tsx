@@ -15,10 +15,11 @@ interface Props {
 
 const LABELS = {
   ja: {
-    title: "議論サマリー",
-    conclusion: "結論",
-    mainPoints: "主要ポイント",
-    nextActions: "次のアクション",
+    title: "実行判断サマリー",
+    verdict: "実行判断",
+    verdictReason: "判断理由",
+    conditions: "実行に値する条件",
+    firstStep: "最初の一手",
     copy: "コピー",
     copied: "コピー済み",
     print: "印刷",
@@ -28,10 +29,11 @@ const LABELS = {
     retry: "リトライ",
   },
   en: {
-    title: "Discussion Summary",
-    conclusion: "Conclusion",
-    mainPoints: "Main Points",
-    nextActions: "Next Actions",
+    title: "Execution Verdict",
+    verdict: "Verdict",
+    verdictReason: "Reason",
+    conditions: "Conditions for Execution",
+    firstStep: "First Step",
     copy: "Copy",
     copied: "Copied",
     print: "Print",
@@ -47,14 +49,15 @@ function buildPlainText(summary: Summary, lang: Language): string {
   const lines: string[] = [
     `=== ${L.title} ===`,
     "",
-    `【${L.conclusion}】`,
-    summary.conclusion,
+    `【${L.verdict}】`,
+    summary.verdict,
+    summary.verdict_reason,
     "",
-    `【${L.mainPoints}】`,
-    ...summary.main_points.map((p) => `• ${p}`),
+    `【${L.conditions}】`,
+    ...summary.conditions.map((c) => `• ${c}`),
     "",
-    `【${L.nextActions}】`,
-    ...summary.next_actions.map((a, i) => `${i + 1}. ${a}`),
+    `【${L.firstStep}】`,
+    summary.first_step,
   ];
   return lines.join("\n");
 }
@@ -184,26 +187,29 @@ export default function DiscussionSummary({ summary, lang = "ja", isLoading, err
 
       {/* カード本文 */}
       <div className="px-5 py-4 space-y-4">
-        {/* 結論 */}
+        {/* 実行判断 */}
         <section>
-          <SectionLabel text={L.conclusion} icon="💡" />
-          <p className="mt-2 text-sm text-gray-800 leading-relaxed bg-blue-50 rounded-xl px-4 py-3 border border-blue-100">
-            {summary.conclusion}
-          </p>
+          <SectionLabel text={L.verdict} icon="⚖️" />
+          <div className="mt-2">
+            <VerdictBadge verdict={summary.verdict} />
+            <p className="mt-2 text-sm text-gray-700 leading-relaxed">
+              {summary.verdict_reason}
+            </p>
+          </div>
         </section>
 
         <div className="border-t border-gray-100" />
 
-        {/* 主要ポイント */}
+        {/* 実行に値する条件 */}
         <section>
-          <SectionLabel text={L.mainPoints} icon="📌" />
+          <SectionLabel text={L.conditions} icon="📋" />
           <ul className="mt-2 space-y-2">
-            {summary.main_points.map((point, i) => (
+            {summary.conditions.map((condition, i) => (
               <li key={i} className="flex gap-2.5 text-sm text-gray-800">
                 <span className="mt-0.5 w-4 h-4 shrink-0 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-bold">
                   {i + 1}
                 </span>
-                <span className="leading-relaxed">{point}</span>
+                <span className="leading-relaxed">{condition}</span>
               </li>
             ))}
           </ul>
@@ -211,22 +217,12 @@ export default function DiscussionSummary({ summary, lang = "ja", isLoading, err
 
         <div className="border-t border-gray-100" />
 
-        {/* 次のアクション */}
+        {/* 最初の一手 */}
         <section>
-          <SectionLabel text={L.nextActions} icon="🚀" />
-          <ol className="mt-2 space-y-2">
-            {summary.next_actions.map((action, i) => (
-              <li
-                key={i}
-                className="flex gap-2.5 text-sm text-gray-800 p-3 rounded-xl border border-gray-100 bg-gray-50 hover:bg-blue-50 hover:border-blue-100 transition-colors"
-              >
-                <span className="shrink-0 text-xs font-bold text-blue-600 mt-0.5 w-4 text-right">
-                  {i + 1}.
-                </span>
-                <span className="leading-relaxed">{action}</span>
-              </li>
-            ))}
-          </ol>
+          <SectionLabel text={L.firstStep} icon="🚀" />
+          <p className="mt-2 text-sm text-gray-800 leading-relaxed p-3 rounded-xl border border-blue-100 bg-blue-50 font-medium">
+            {summary.first_step}
+          </p>
         </section>
       </div>
     </div>
@@ -234,6 +230,23 @@ export default function DiscussionSummary({ summary, lang = "ja", isLoading, err
 }
 
 // ─── 小コンポーネント ──────────────────────────────────────
+
+function VerdictBadge({ verdict }: { verdict: string }) {
+  const map: Record<string, { bg: string; text: string; border: string }> = {
+    "実行すべき":         { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-300" },
+    "条件付きで実行すべき": { bg: "bg-amber-50",   text: "text-amber-700",   border: "border-amber-300"   },
+    "見送るべき":         { bg: "bg-red-50",     text: "text-red-700",     border: "border-red-300"     },
+    "Should execute":          { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-300" },
+    "Execute with conditions": { bg: "bg-amber-50",   text: "text-amber-700",   border: "border-amber-300"   },
+    "Pass for now":            { bg: "bg-red-50",     text: "text-red-700",     border: "border-red-300"     },
+  };
+  const style = map[verdict] ?? { bg: "bg-gray-50", text: "text-gray-700", border: "border-gray-300" };
+  return (
+    <span className={`inline-block px-3 py-1 rounded-full text-sm font-bold border ${style.bg} ${style.text} ${style.border}`}>
+      {verdict}
+    </span>
+  );
+}
 
 function SectionLabel({ text, icon }: { text: string; icon: string }) {
   return (
