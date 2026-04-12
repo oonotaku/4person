@@ -90,6 +90,7 @@ interface DebateResponse {
     isMain: boolean;
   }[];
   phaseCompleted?: boolean;
+  needsChoice?: boolean;
 }
 
 // ─── メインコンポーネント ──────────────────────────────────
@@ -106,6 +107,7 @@ function HomeContent() {
   const [currentPhase, setCurrentPhase] = useState<Phase>(1);
   const [theme, setTheme] = useState<string>("");
   const [showNextPhaseButton, setShowNextPhaseButton] = useState(false);
+  const [needsChoice, setNeedsChoice] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -145,6 +147,8 @@ function HomeContent() {
       }));
       setMessages(loaded);
       setSessionId(id);
+      setNeedsChoice(false);
+      setShowNextPhaseButton(false);
 
       // 完了済みセッションはDBのsummaryカラムから読んで表示
       const sessionData = pastSessions.find((s) => s.id === id);
@@ -173,6 +177,7 @@ function HomeContent() {
     setCurrentPhase(1);
     setTheme("");
     setShowNextPhaseButton(false);
+    setNeedsChoice(false);
   }
 
   // 送信処理（API連携）
@@ -255,6 +260,7 @@ function HomeContent() {
 
       const typed = data as DebateResponse;
       if (typed.phaseCompleted) setShowNextPhaseButton(true);
+      if (typed.needsChoice) setNeedsChoice(true);
 
       // 順番に表示（300ms間隔）
       for (let i = 0; i < typed.responses.length; i++) {
@@ -297,6 +303,91 @@ function HomeContent() {
           timestamp: new Date(),
         },
       ]);
+    }
+
+    setIsLoading(false);
+  }
+
+  // 調査者の3択ボタン処理
+  async function handleChoice(choice: 1 | 2 | 3) {
+    setNeedsChoice(false);
+
+    if (choice === 3) {
+      // APIを呼ばずに次のフェーズボタンを表示
+      setShowNextPhaseButton(true);
+      return;
+    }
+
+    const choiceText =
+      choice === 1
+        ? lang === "ja" ? "① この案をブラッシュアップする" : "① Brush up this idea"
+        : lang === "ja" ? "② 全く新しい案を出してもらう" : "② Give me a completely new idea";
+
+    const userMsg: Message = {
+      id: crypto.randomUUID(),
+      speaker: "taku",
+      content: choiceText,
+      target: ["proposer"],
+      timestamp: new Date(),
+    };
+
+    const historyForApi = messages
+      .filter((m) => m.speaker !== "taku")
+      .map((m) => ({
+        role: "assistant" as const,
+        content: `[${m.speaker}] ${m.content}`,
+      }));
+
+    setMessages((prev) => [...prev, userMsg]);
+    setIsLoading(true);
+
+    if (sessionId) {
+      saveMessage(sessionId, "taku", choiceText, "proposer").catch((e) =>
+        console.error("[saveMessage choice error]", e)
+      );
+    }
+
+    try {
+      const res = await fetch("/api/debate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          theme,
+          messages: historyForApi,
+          target: ["proposer"],
+          userMessage: choiceText,
+          language: lang,
+          sessionId,
+          phase: currentPhase,
+        }),
+      });
+
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+
+      const data = (await res.json()) as DebateResponse;
+      if (data.phaseCompleted) setShowNextPhaseButton(true);
+      if (data.needsChoice) setNeedsChoice(true);
+
+      for (let i = 0; i < data.responses.length; i++) {
+        const r = data.responses[i];
+        await new Promise<void>((resolve) => {
+          setTimeout(() => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: crypto.randomUUID(),
+                speaker: r.persona,
+                content: r.content,
+                target: "all" as const,
+                timestamp: new Date(),
+              },
+            ]);
+            resolve();
+          }, 300 * (i + 1));
+        });
+      }
+    } catch (err) {
+      console.error("[handleChoice error]", err);
     }
 
     setIsLoading(false);
@@ -708,58 +799,87 @@ function HomeContent() {
 
           {/* 入力エリア */}
           <div className="bg-white border-t border-gray-200 px-4 pt-3 pb-4 max-w-3xl w-full mx-auto shrink-0">
-            {/* 発言先トグル */}
-            <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-              <span className="text-xs text-gray-500 shrink-0">{L.targetLabel}</span>
-              <button
-                onClick={() => setTargets(new Set())}
-                className={`text-xs px-2.5 py-1 rounded-full border transition-colors font-medium ${
-                  targets.size === 0
-                    ? "bg-gray-800 text-white border-gray-800"
-                    : "bg-white text-gray-600 border-gray-300 hover:bg-gray-100"
-                }`}
-              >
-                {L.all}
-              </button>
-              {PHASE_META[currentPhase].personas.map((p) => {
-                const meta = PERSONAS[p];
-                const active = targets.has(p);
-                return (
+            {needsChoice && !isLoading ? (
+              /* 調査者の3択ボタン */
+              <div className="space-y-2">
+                <p className="text-xs text-teal-700 font-semibold flex items-center gap-1">
+                  🔍 {lang === "ja" ? "調査者からの提案：選択してください" : "Researcher's proposal: choose an option"}
+                </p>
+                <button
+                  onClick={() => handleChoice(1)}
+                  className="w-full text-left px-4 py-3 bg-white border border-teal-300 rounded-xl text-sm text-gray-800 hover:bg-teal-50 transition-colors font-medium"
+                >
+                  {lang === "ja" ? "① この案をブラッシュアップする" : "① Brush up this idea"}
+                </button>
+                <button
+                  onClick={() => handleChoice(2)}
+                  className="w-full text-left px-4 py-3 bg-white border border-teal-300 rounded-xl text-sm text-gray-800 hover:bg-teal-50 transition-colors font-medium"
+                >
+                  {lang === "ja" ? "② 全く新しい案を出してもらう" : "② Give me a completely new idea"}
+                </button>
+                <button
+                  onClick={() => handleChoice(3)}
+                  className="w-full text-left px-4 py-3 bg-white border border-blue-300 rounded-xl text-sm text-gray-800 hover:bg-blue-50 transition-colors font-medium"
+                >
+                  {lang === "ja" ? "③ この案で次のフェーズに進む" : "③ Proceed to next phase with this idea"}
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* 発言先トグル */}
+                <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+                  <span className="text-xs text-gray-500 shrink-0">{L.targetLabel}</span>
                   <button
-                    key={p}
-                    onClick={() => toggleTarget(p)}
+                    onClick={() => setTargets(new Set())}
                     className={`text-xs px-2.5 py-1 rounded-full border transition-colors font-medium ${
-                      active
-                        ? `${meta.bgClass} ${meta.colorClass} ${meta.borderClass}`
-                        : "bg-white text-gray-500 border-gray-300 hover:bg-gray-100"
+                      targets.size === 0
+                        ? "bg-gray-800 text-white border-gray-800"
+                        : "bg-white text-gray-600 border-gray-300 hover:bg-gray-100"
                     }`}
                   >
-                    {meta.emoji} {meta.name[lang]}
+                    {L.all}
                   </button>
-                );
-              })}
-            </div>
-            {/* テキストエリア + 送信ボタン */}
-            <div className="flex gap-2 items-end">
-              <textarea
-                ref={textareaRef}
-                rows={2}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={L.placeholder}
-                disabled={isLoading}
-                className="flex-1 resize-none border border-gray-300 rounded-xl px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 leading-relaxed"
-              />
-              <button
-                onClick={handleSubmit}
-                disabled={isLoading || !input.trim()}
-                className="shrink-0 bg-blue-700 hover:bg-blue-800 disabled:opacity-40 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors flex flex-col items-center gap-0.5 h-[60px] justify-center"
-              >
-                <span>{L.send}</span>
-                <span className="text-[10px] font-normal opacity-75">{L.sendHint}</span>
-              </button>
-            </div>
+                  {PHASE_META[currentPhase].personas.map((p) => {
+                    const meta = PERSONAS[p];
+                    const active = targets.has(p);
+                    return (
+                      <button
+                        key={p}
+                        onClick={() => toggleTarget(p)}
+                        className={`text-xs px-2.5 py-1 rounded-full border transition-colors font-medium ${
+                          active
+                            ? `${meta.bgClass} ${meta.colorClass} ${meta.borderClass}`
+                            : "bg-white text-gray-500 border-gray-300 hover:bg-gray-100"
+                        }`}
+                      >
+                        {meta.emoji} {meta.name[lang]}
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* テキストエリア + 送信ボタン */}
+                <div className="flex gap-2 items-end">
+                  <textarea
+                    ref={textareaRef}
+                    rows={2}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder={L.placeholder}
+                    disabled={isLoading}
+                    className="flex-1 resize-none border border-gray-300 rounded-xl px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 leading-relaxed"
+                  />
+                  <button
+                    onClick={handleSubmit}
+                    disabled={isLoading || !input.trim()}
+                    className="shrink-0 bg-blue-700 hover:bg-blue-800 disabled:opacity-40 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors flex flex-col items-center gap-0.5 h-[60px] justify-center"
+                  >
+                    <span>{L.send}</span>
+                    <span className="text-[10px] font-normal opacity-75">{L.sendHint}</span>
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </>
       )}

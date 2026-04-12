@@ -75,9 +75,10 @@ ${langInstruction}`,
 - ユーザーから「別の視点で調査して」「もっと詳しく」「再調査して」等の追加調査依頼が来た場合：web_searchを再実行して追加レポートを返す
 
 ## 決断検出（必須・省略不可）
-ユーザーの直近の発言を分析し、発言の最後の行に必ず以下のいずれか1つだけを出力すること：
-ユーザーが1案を明示的に選択・決断した場合（例：「①で進める」「案Aにします」「これで行きます」「③ このまま次へ」「この案で決めた」） → <<<IS_DECIDED>>>
-まだ検討中・追加調査中・選択肢提示直後・初回レポートの場合 → <<<NOT_DECIDED>>>
+発言の最後の行に必ず以下のいずれか1つだけを出力すること：
+- 調査レポートの末尾に①②③の選択肢を提示した場合 → <<<NEEDS_CHOICE>>>
+- ユーザーが①②③のいずれかを選択・決断した場合（例：「①で進める」「案Aにします」「これで行きます」「③ このまま次へ」「この案で決めた」） → <<<IS_DECIDED>>>
+- 上記以外（追加調査・再レポート・通常の会話など） → <<<CONTINUE>>>
 
 ## 制約
 ${noTagInstruction}
@@ -291,7 +292,7 @@ async function callClaude(
 async function callClaudeWithSearch(
   language: "ja" | "en",
   messages: { role: "user" | "assistant"; content: string }[]
-): Promise<{ content: string; isDecided: boolean }> {
+): Promise<{ content: string; isDecided: boolean; needsChoice: boolean }> {
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: 1500,
@@ -308,12 +309,14 @@ async function callClaudeWithSearch(
     .trim();
 
   const isDecided = rawText.includes("<<<IS_DECIDED>>>");
+  const needsChoice = rawText.includes("<<<NEEDS_CHOICE>>>");
   const content = rawText
     .replace("<<<IS_DECIDED>>>", "")
-    .replace("<<<NOT_DECIDED>>>", "")
+    .replace("<<<NEEDS_CHOICE>>>", "")
+    .replace("<<<CONTINUE>>>", "")
     .trim();
 
-  return { content, isDecided };
+  return { content, isDecided, needsChoice };
 }
 
 // ─── DB保存（失敗しても議論は続行） ─────────────────────────
@@ -475,11 +478,13 @@ export async function POST(request: Request) {
       ];
 
       let isDecidedByResearcher = false;
+      let needsChoiceByResearcher = false;
 
       for (const persona of respondingPersonas) {
         if (persona === "researcher") {
-          const { content: researcherContent, isDecided } = await callClaudeWithSearch(language, chainMessages);
+          const { content: researcherContent, isDecided, needsChoice: nc } = await callClaudeWithSearch(language, chainMessages);
           isDecidedByResearcher = isDecided;
+          needsChoiceByResearcher = nc;
           results.push({ persona, content: researcherContent, isMain: true });
           await dbSaveMessage(sessionId, persona as Speaker, researcherContent);
           chainMessages.push({ role: "assistant", content: `[${persona}] ${researcherContent}` });
@@ -512,9 +517,10 @@ export async function POST(request: Request) {
         }
       }
 
-      // Phase 1 では調査者の is_decided を phaseCompleted として返す
+      // Phase 1 では調査者の is_decided を phaseCompleted、needs_choice を needsChoice として返す
       const phaseCompleted = phase === 1 ? isDecidedByResearcher : false;
-      return Response.json({ responses: results, phaseCompleted });
+      const needsChoice = phase === 1 ? needsChoiceByResearcher : false;
+      return Response.json({ responses: results, phaseCompleted, needsChoice });
     }
 
     // ─── 全員への発言（現フェーズの人格が反応） ───────────────
@@ -576,13 +582,14 @@ export async function POST(request: Request) {
             ? "調査者として、発案者のアイデアについてWeb検索で競合・市場規模・法規制を調査してレポートせよ。"
             : "As the Researcher, search the web for competitors, market size, and regulations related to the Proposer's ideas and report your findings.",
       });
-      const { content: researcherContent, isDecided } = await callClaudeWithSearch(language, chainMessages);
+      const { content: researcherContent, isDecided, needsChoice } = await callClaudeWithSearch(language, chainMessages);
       results.push({ persona: "researcher", content: researcherContent, isMain: true });
       await dbSaveMessage(sessionId, "researcher", researcherContent);
 
       return Response.json({
         responses: results,
         phaseCompleted: isDecided,
+        needsChoice,
       });
     }
 
