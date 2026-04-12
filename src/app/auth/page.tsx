@@ -23,6 +23,8 @@ function localizeError(message: string): string {
 }
 
 const PERSONAS = [
+  { emoji: "💡", name: "発案者", desc: "アイデアを広げる" },
+  { emoji: "🔍", name: "調査者", desc: "市場を調べる" },
   { emoji: "🟢", name: "肯定者", desc: "可能性を最大化する" },
   { emoji: "🔴", name: "批判者", desc: "甘い前提を暴く" },
   { emoji: "🔵", name: "俯瞰者", desc: "構造を整理する" },
