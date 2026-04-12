@@ -172,7 +172,6 @@ function HomeContent() {
     setCurrentPhase(1);
     setTheme("");
     setShowNextPhaseButton(false);
-    setNeedsClarification(false);
   }
 
   // 送信処理（API連携）
@@ -202,7 +201,6 @@ function HomeContent() {
 
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
-    setNeedsClarification(false);
     setIsLoading(true);
 
     // セッションIDを確定（初回のみ作成）
@@ -308,7 +306,6 @@ function HomeContent() {
     setCurrentPhase(1);
     setTargets(new Set());
     setShowNextPhaseButton(false);
-    setNeedsClarification(false);
     if (sessionId) {
       updateSessionPhase(sessionId, 1).catch((e) =>
         console.error("[updateSessionPhase error]", e)
@@ -321,7 +318,6 @@ function HomeContent() {
     const nextPhase = (currentPhase + 1) as Phase;
     setCurrentPhase(nextPhase);
     setShowNextPhaseButton(false);
-    setNeedsClarification(false);
     setIsLoading(true);
 
     if (sessionId) {
