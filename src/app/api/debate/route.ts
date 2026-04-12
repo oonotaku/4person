@@ -7,7 +7,12 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY?.trim() });
 const MODEL = "claude-sonnet-4-20250514";
 
 // ─── システムプロンプト ──────────────────────────────────────
-function getSystemPrompt(persona: string, language: "ja" | "en", isSub: boolean = false, isIntervention: boolean = false): string {
+function getSystemPrompt(
+  persona: string,
+  language: "ja" | "en",
+  isSub: boolean = false,
+  isIntervention: boolean = false
+): string {
   const langInstruction =
     language === "ja"
       ? "必ず日本語で回答すること。"
@@ -15,8 +20,8 @@ function getSystemPrompt(persona: string, language: "ja" | "en", isSub: boolean 
 
   const noTagInstruction =
     language === "ja"
-      ? "返答の冒頭に[肯定者][批判者][俯瞰者][統合者][affirmer][critic][observer][synthesizer]などのロール名を絶対につけないこと。"
-      : "Never prefix your response with role names like [affirmer][critic][observer][synthesizer] or their Japanese equivalents.";
+      ? "返答の冒頭に[発案者][調査者][肯定者][批判者][俯瞰者][統合者][proposer][researcher][affirmer][critic][observer][synthesizer]などのロール名を絶対につけないこと。"
+      : "Never prefix your response with role names like [proposer][researcher][affirmer][critic][observer][synthesizer] or their Japanese equivalents.";
 
   const lengthInstruction = isSub
     ? language === "ja"
@@ -27,6 +32,50 @@ function getSystemPrompt(persona: string, language: "ja" | "en", isSub: boolean 
       : "Keep your response to 3-4 sentences.";
 
   const prompts: Record<string, string> = {
+    proposer: `あなたは「発案者」です。
+
+## アプリの文脈
+このアプリ（FRICTION）はビジネスアイデアや事業構想の壁打ちを目的としたAIマルチエージェント議論ツールである。ユーザーが入力するテーマはビジネス・事業・プロダクトに関するものと解釈すること。
+
+## 役割
+ビジネスアイデアを具体的に2〜3案生成し、可能性を広げる。
+
+## 発言ルール
+- 具体的なアイデアを2〜3案、番号付きで提示する
+- 各案に1文の根拠を添える（市場ニーズ・差別化ポイントなど）
+- 調査者から「競合あり・障壁あり」の問い返しを受けた場合は、差別化案を提示する
+- 感情的な励まし・根拠のない楽観はNG
+
+## 制約
+${noTagInstruction}
+
+## 言語
+${langInstruction}`,
+
+    researcher: `あなたは「調査者」です。
+
+## 役割
+直前の発案者が提示した具体的な案を調査対象として、Web検索でリアルタイム情報を取得し、競合・市場規模・法規制を客観的にレポートする。
+ユーザーの元のテーマではなく、発案者が提示した各案の実現可能性を調べること。
+
+## 発言ルール
+- 発案者の提示した案を明示的に参照した上で調査結果を述べる
+- 検索結果に基づいた事実ベースの発言のみ。憶測はNG
+- 競合・法規制・参入障壁が発見された場合：具体的に指摘し、ユーザーに「どうしますか？」と問い返す
+- 問題が見つからない場合：その旨を伝え、検証フェーズへの移行を促す
+- 3〜5文以内に収める
+
+## 内部フラグ（必須・省略不可）
+発言の最後の行に必ず以下のいずれか1つだけを出力すること：
+障壁あり・要確認の場合 → <<<NEEDS_CLARIFICATION>>>
+問題なし・クリアの場合 → <<<CLEAR>>>
+
+## 制約
+${noTagInstruction}
+
+## 言語
+${langInstruction}`,
+
     affirmer: `あなたは「肯定者」です。
 
 ## 役割
@@ -122,7 +171,7 @@ ${langInstruction}`,
     synthesizer: `あなたは「統合者」です。
 
 ## 役割
-3人の議論を受けて現時点の最適解を出す。
+全人格の議論を受けて現時点の最適解を出す。
 
 ## 発言ルール
 - 口癖：「3人の議論を踏まえると」
@@ -229,6 +278,35 @@ async function callClaude(
   return block.text;
 }
 
+// ─── 調査者：Web検索付きClaude呼び出し ──────────────────────
+async function callClaudeWithSearch(
+  language: "ja" | "en",
+  messages: { role: "user" | "assistant"; content: string }[]
+): Promise<{ content: string; needsClarification: boolean }> {
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: 1500,
+    system: getSystemPrompt("researcher", language),
+    tools: [{ type: "web_search_20250305", name: "web_search" }] as unknown as Anthropic.Messages.Tool[],
+    messages,
+  });
+
+  // テキストブロックをすべて結合
+  const rawText = response.content
+    .filter((b) => b.type === "text")
+    .map((b) => (b as { type: "text"; text: string }).text)
+    .join("\n")
+    .trim();
+
+  const needsClarification = rawText.includes("<<<NEEDS_CLARIFICATION>>>");
+  const content = rawText
+    .replace("<<<NEEDS_CLARIFICATION>>>", "")
+    .replace("<<<CLEAR>>>", "")
+    .trim();
+
+  return { content, needsClarification };
+}
+
 // ─── DB保存（失敗しても議論は続行） ─────────────────────────
 async function dbSaveMessage(sessionId: string | undefined, speaker: Speaker, content: string) {
   if (!sessionId) return;
@@ -248,6 +326,13 @@ async function dbSaveFinalConclusion(sessionId: string | undefined, conclusion: 
   }
 }
 
+// ─── フェーズ別人格マップ ─────────────────────────────────────
+const PHASE_PERSONAS: Record<number, string[]> = {
+  1: ["proposer", "researcher"],
+  2: ["affirmer", "critic"],
+  3: ["observer", "synthesizer"],
+};
+
 // ─── POSTハンドラー ──────────────────────────────────────────
 export async function POST(request: Request) {
   const body = await request.json();
@@ -259,6 +344,8 @@ export async function POST(request: Request) {
     language,
     sessionId,
     wasInterventionPrevious,
+    phase = 1,
+    isPhaseTransition = false,
   } = body as {
     theme: string;
     messages: { role: "user" | "assistant"; content: string }[];
@@ -267,49 +354,167 @@ export async function POST(request: Request) {
     language: "ja" | "en";
     sessionId?: string;
     wasInterventionPrevious?: boolean;
+    phase?: 1 | 2 | 3;
+    isPhaseTransition?: boolean;
   };
 
   try {
-  // "done" 検知：通常の議論処理をスキップしてサマリーを生成
-  if (userMessage && userMessage.trim().toLowerCase() === 'done') {
-    if (!sessionId) {
-      return Response.json({ error: 'sessionId is required to generate summary' }, { status: 400 })
+    // ─── "done" 検知 ─────────────────────────────────────────
+    if (userMessage && userMessage.trim().toLowerCase() === "done") {
+      if (!sessionId) {
+        return Response.json({ error: "sessionId is required to generate summary" }, { status: 400 });
+      }
+      const summary = await generateDiscussionSummary(sessionId);
+      return Response.json({ isDone: true, summary });
     }
-    const summary = await generateDiscussionSummary(sessionId)
-    return Response.json({ isDone: true, summary })
-  }
 
-  // 応答する人格を決定
-  const allPersonas = ["affirmer", "critic", "observer", "synthesizer"];
-  const respondingPersonas: string[] =
-    target && target.length > 0 ? target : allPersonas;
-  console.log("[route.ts] received target:", target, "→ respondingPersonas:", respondingPersonas);
+    const results: {
+      persona: string;
+      content: string;
+      isMain: boolean;
+      isIntervention?: boolean;
+    }[] = [];
 
-  // 会話の起点メッセージを組み立て
-  const baseContent = userMessage
-    ? userMessage
-    : language === "ja"
-      ? `テーマ：${theme}`
-      : `Topic: ${theme}`;
+    const currentPhasePersonas = PHASE_PERSONAS[phase] ?? ["affirmer", "critic"];
 
-  // 連鎖用のメッセージ配列（既存の会話履歴 + 今回のユーザー発言）
-  const chainMessages: { role: "user" | "assistant"; content: string }[] = [
-    ...historyMessages,
-    { role: "user", content: baseContent },
-  ];
+    // ─── フェーズ自動遷移（「次のフェーズへ」ボタン押下） ─────
+    if (isPhaseTransition) {
+      const transitionPrompt =
+        phase === 2
+          ? language === "ja"
+            ? "Phase 1（発案）で発案者と調査者が議論した内容を踏まえて、Phase 2（検証）として可能性と弱点を検証せよ。"
+            : "Based on the divergence phase discussion by the Proposer and Researcher, begin Phase 2 verification."
+          : language === "ja"
+            ? "Phase 2（検証）で肯定者と批判者が議論した内容を踏まえて、Phase 3（統合）として議論を整理・統合せよ。"
+            : "Based on the verification phase discussion by the Affirmer and Critic, begin Phase 3 integration.";
 
-  const results: {
-    persona: string;
-    content: string;
-    isMain: boolean;
-    isIntervention?: boolean;
-  }[] = [];
+      const chainMessages: { role: "user" | "assistant"; content: string }[] = [
+        ...historyMessages,
+        { role: "user", content: transitionPrompt },
+      ];
 
-  // 全員への発言（テーマ開始 or 全員指定）の場合は4人格を連鎖
-  if (!target || target.length === 0) {
-    // --- プレチェック：介入判定（前回介入済みの場合はスキップして通常フローへ復帰） ---
+      if (phase === 2) {
+        // 肯定者
+        const affirmerReply = await callClaude("affirmer", language, chainMessages);
+        results.push({ persona: "affirmer", content: affirmerReply, isMain: true });
+        await dbSaveMessage(sessionId, "affirmer", affirmerReply);
+        chainMessages.push({
+          role: "assistant",
+          content: language === "ja" ? `[肯定者] ${affirmerReply}` : `[Affirmer] ${affirmerReply}`,
+        });
+
+        // 批判者
+        chainMessages.push({
+          role: "user",
+          content:
+            language === "ja"
+              ? "批判者として、肯定者の発言を踏まえて発言せよ。"
+              : "As the Critic, respond to the Affirmer's statement above.",
+        });
+        const criticReply = await callClaude("critic", language, chainMessages);
+        results.push({ persona: "critic", content: criticReply, isMain: true });
+        await dbSaveMessage(sessionId, "critic", criticReply);
+
+        return Response.json({ responses: results, phaseCompleted: true });
+
+      } else if (phase === 3) {
+        // 俯瞰者
+        const observerReply = await callClaude("observer", language, chainMessages);
+        results.push({ persona: "observer", content: observerReply, isMain: true });
+        await dbSaveMessage(sessionId, "observer", observerReply);
+        chainMessages.push({
+          role: "assistant",
+          content: language === "ja" ? `[俯瞰者] ${observerReply}` : `[Observer] ${observerReply}`,
+        });
+
+        // 統合者
+        chainMessages.push({
+          role: "user",
+          content:
+            language === "ja"
+              ? "統合者として、全人格の議論を踏まえて現時点の最適解と次のアクションを出せ。"
+              : "As the Synthesizer, provide the optimal conclusion and next action based on all perspectives above.",
+        });
+        const synthesizerReply = await callClaude("synthesizer", language, chainMessages);
+        results.push({ persona: "synthesizer", content: synthesizerReply, isMain: true });
+        await dbSaveMessage(sessionId, "synthesizer", synthesizerReply);
+        await dbSaveFinalConclusion(sessionId, synthesizerReply);
+
+        return Response.json({ responses: results, phaseCompleted: false });
+      }
+
+      return Response.json({ responses: results });
+    }
+
+    // ─── 通常フロー（ユーザー発言） ──────────────────────────
+    const baseContent = userMessage
+      ? userMessage
+      : language === "ja"
+        ? `テーマ：${theme}`
+        : `Topic: ${theme}`;
+
+    const respondingPersonas: string[] =
+      target && target.length > 0 ? target : currentPhasePersonas;
+
+    console.log("[route.ts] phase:", phase, "target:", target, "→ respondingPersonas:", respondingPersonas);
+
+    // ─── 特定人格への発言 ─────────────────────────────────────
+    if (target && target.length > 0) {
+      const chainMessages: { role: "user" | "assistant"; content: string }[] = [
+        ...historyMessages,
+        { role: "user", content: baseContent },
+      ];
+
+      for (const persona of respondingPersonas) {
+        if (persona === "researcher") {
+          const { content: researcherContent, needsClarification } = await callClaudeWithSearch(language, chainMessages);
+          results.push({ persona, content: researcherContent, isMain: true });
+          await dbSaveMessage(sessionId, persona as Speaker, researcherContent);
+          chainMessages.push({ role: "assistant", content: `[${persona}] ${researcherContent}` });
+          if (needsClarification) {
+            return Response.json({ responses: results, needsClarification: true, phaseCompleted: false });
+          }
+        } else {
+          const reply = await callClaude(persona, language, chainMessages);
+          results.push({ persona, content: reply, isMain: true });
+          await dbSaveMessage(sessionId, persona as Speaker, reply);
+          chainMessages.push({ role: "assistant", content: `[${persona}] ${reply}` });
+        }
+      }
+
+      // サブ人格：現フェーズの残り人格が一言反応
+      const subPersonas = currentPhasePersonas.filter((p) => !respondingPersonas.includes(p));
+      if (subPersonas.length > 0) {
+        const mainSummary = results.map((r) => r.content).join("\n\n");
+        for (const persona of subPersonas) {
+          const subContext: { role: "user" | "assistant"; content: string }[] = [
+            ...chainMessages,
+            {
+              role: "user",
+              content:
+                language === "ja"
+                  ? `${respondingPersonas.join("、")}の発言を受けて、あなたの視点から1〜2文で反応せよ。\n\n${mainSummary}`
+                  : `React to the following statement in 1-2 sentences.\n\n${mainSummary}`,
+            },
+          ];
+          const reply = await callClaude(persona, language, subContext, true);
+          results.push({ persona, content: reply, isMain: false });
+          await dbSaveMessage(sessionId, persona as Speaker, reply);
+        }
+      }
+
+      return Response.json({ responses: results });
+    }
+
+    // ─── 全員への発言（現フェーズの人格が反応） ───────────────
+    const chainMessages: { role: "user" | "assistant"; content: string }[] = [
+      ...historyMessages,
+      { role: "user", content: baseContent },
+    ];
+
+    // 介入チェック（Phase 1 および前回介入済みはスキップ）
     let interventionTrigger: "taku" | "critic" | null = null;
-    if (!wasInterventionPrevious) {
+    if (phase !== 1 && !wasInterventionPrevious) {
       const lastCriticMessage =
         historyMessages
           .filter((m) => m.content.startsWith("[critic]"))
@@ -329,7 +534,7 @@ export async function POST(request: Request) {
     }
 
     if (interventionTrigger) {
-      // ── 介入あり：俯瞰者のみ発言してラウンド終了 ────────────────
+      // 俯瞰者が介入
       chainMessages.push({
         role: "user",
         content:
@@ -340,12 +545,39 @@ export async function POST(request: Request) {
       const observerReply = await callClaude("observer", language, chainMessages, false, true);
       results.push({ persona: "observer", content: observerReply, isMain: true, isIntervention: true });
       await dbSaveMessage(sessionId, "observer", observerReply);
-
       return Response.json({ responses: results, interventionOccurred: true });
-    } else {
-      // ── 通常：肯定者→批判者→俯瞰者→統合者 ──────────────────────
+    }
 
-      // 1. 肯定者
+    // ─── Phase 1：発案者 → 調査者 ────────────────────────────
+    if (phase === 1) {
+      const proposerReply = await callClaude("proposer", language, chainMessages);
+      results.push({ persona: "proposer", content: proposerReply, isMain: true });
+      await dbSaveMessage(sessionId, "proposer", proposerReply);
+      chainMessages.push({
+        role: "assistant",
+        content: language === "ja" ? `[発案者] ${proposerReply}` : `[Proposer] ${proposerReply}`,
+      });
+
+      chainMessages.push({
+        role: "user",
+        content:
+          language === "ja"
+            ? "調査者として、発案者のアイデアについてWeb検索で競合・市場規模・法規制を調査してレポートせよ。"
+            : "As the Researcher, search the web for competitors, market size, and regulations related to the Proposer's ideas and report your findings.",
+      });
+      const { content: researcherContent, needsClarification } = await callClaudeWithSearch(language, chainMessages);
+      results.push({ persona: "researcher", content: researcherContent, isMain: true });
+      await dbSaveMessage(sessionId, "researcher", researcherContent);
+
+      return Response.json({
+        responses: results,
+        needsClarification,
+        phaseCompleted: !needsClarification,
+      });
+    }
+
+    // ─── Phase 2：肯定者 → 批判者 ────────────────────────────
+    if (phase === 2) {
       const affirmerReply = await callClaude("affirmer", language, chainMessages);
       results.push({ persona: "affirmer", content: affirmerReply, isMain: true });
       await dbSaveMessage(sessionId, "affirmer", affirmerReply);
@@ -354,7 +586,6 @@ export async function POST(request: Request) {
         content: language === "ja" ? `[肯定者] ${affirmerReply}` : `[Affirmer] ${affirmerReply}`,
       });
 
-      // 2. 批判者（肯定者の発言を参照）
       chainMessages.push({
         role: "user",
         content:
@@ -365,19 +596,12 @@ export async function POST(request: Request) {
       const criticReply = await callClaude("critic", language, chainMessages);
       results.push({ persona: "critic", content: criticReply, isMain: true });
       await dbSaveMessage(sessionId, "critic", criticReply);
-      chainMessages.push({
-        role: "assistant",
-        content: language === "ja" ? `[批判者] ${criticReply}` : `[Critic] ${criticReply}`,
-      });
 
-      // 3. 俯瞰者（両者を参照）
-      chainMessages.push({
-        role: "user",
-        content:
-          language === "ja"
-            ? "俯瞰者として、上記の肯定者・批判者の議論を踏まえて構造的に整理せよ。"
-            : "As the Observer, structurally synthesize the debate between the Affirmer and Critic above.",
-      });
+      return Response.json({ responses: results, phaseCompleted: true });
+    }
+
+    // ─── Phase 3：俯瞰者 → 統合者 ────────────────────────────
+    if (phase === 3) {
       const observerReply = await callClaude("observer", language, chainMessages);
       results.push({ persona: "observer", content: observerReply, isMain: true });
       await dbSaveMessage(sessionId, "observer", observerReply);
@@ -386,59 +610,23 @@ export async function POST(request: Request) {
         content: language === "ja" ? `[俯瞰者] ${observerReply}` : `[Observer] ${observerReply}`,
       });
 
-      // 4. 統合者（3人全員を参照）
       chainMessages.push({
         role: "user",
         content:
           language === "ja"
-            ? "統合者として、3人の議論を踏まえて現時点の最適解と次のアクションを出せ。"
-            : "As the Synthesizer, provide the optimal conclusion and next action based on all three perspectives above.",
+            ? "統合者として、全人格の議論を踏まえて現時点の最適解と次のアクションを出せ。"
+            : "As the Synthesizer, provide the optimal conclusion and next action based on all perspectives above.",
       });
       const synthesizerReply = await callClaude("synthesizer", language, chainMessages);
       results.push({ persona: "synthesizer", content: synthesizerReply, isMain: true });
       await dbSaveMessage(sessionId, "synthesizer", synthesizerReply);
       await dbSaveFinalConclusion(sessionId, synthesizerReply);
-    }
-  } else {
-    // 特定人格への発言：指定人格がメイン、残りがサブ
-    const subPersonas = allPersonas.filter((p) => !target!.includes(p));
-    console.log("[route.ts] mainPersonas:", respondingPersonas, "subPersonas:", subPersonas);
 
-    // メイン人格（指定順に返答）
-    for (const persona of respondingPersonas) {
-      const reply = await callClaude(persona, language, chainMessages);
-      results.push({ persona, content: reply, isMain: true });
-      await dbSaveMessage(sessionId, persona as Speaker, reply);
-      chainMessages.push({
-        role: "assistant",
-        content: `[${persona}] ${reply}`,
-      });
+      return Response.json({ responses: results, phaseCompleted: false });
     }
 
-    // サブ人格（一言ずつ反応）
-    if (subPersonas.length > 0) {
-      const mainPersonaNames = respondingPersonas.join("、");
-      const mainSummary = results.map((r) => r.content).join("\n\n");
+    return Response.json({ responses: results });
 
-      for (const persona of subPersonas) {
-        const subContext = [
-          ...chainMessages,
-          {
-            role: "user" as const,
-            content:
-              language === "ja"
-                ? `${mainPersonaNames}の発言を受けて、あなたの視点から1〜2文で反応せよ。Takuへの返答ではなく、${mainPersonaNames}の発言へのコメントをせよ。\n\n${mainSummary}`
-                : `React to the following statement by ${mainPersonaNames} from your perspective in 1-2 sentences. This is a comment to ${mainPersonaNames}, not a reply to Taku.\n\n${mainSummary}`,
-          },
-        ];
-        const reply = await callClaude(persona, language, subContext, true);
-        results.push({ persona, content: reply, isMain: false });
-        await dbSaveMessage(sessionId, persona as Speaker, reply);
-      }
-    }
-  }
-
-  return Response.json({ responses: results });
   } catch (error) {
     console.error("[debate API error]", error);
     const message = error instanceof Error ? error.message : String(error);

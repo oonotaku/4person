@@ -118,7 +118,7 @@ export default function AuthPage() {
   return (
     <div
       className="min-h-screen flex flex-col lg:flex-row"
-      style={{ background: "linear-gradient(135deg, #6C3CE1 0%, #1A1A4E 100%)" }}
+      style={{ background: "linear-gradient(135deg, #4F46E5 0%, #1E1B4B 100%)" }}
     >
       {/* ── 左：ブランドエリア ── */}
       <div className="flex flex-col justify-center items-center lg:items-start px-8 py-10 lg:py-0 lg:px-20 lg:w-1/2">
@@ -193,7 +193,7 @@ export default function AuthPage() {
                   type="submit"
                   disabled={isSubmitting}
                   className="w-full text-white text-sm font-semibold py-2.5 rounded-xl transition disabled:opacity-50"
-                  style={{ background: "linear-gradient(135deg, #8B5CF6 0%, #6C3CE1 100%)" }}
+                  style={{ background: "linear-gradient(135deg, #4F46E5 0%, #3730A3 100%)" }}
                 >
                   {isSubmitting ? "送信中..." : "リセットメールを送信"}
                 </button>
@@ -295,7 +295,7 @@ export default function AuthPage() {
                   type="submit"
                   disabled={isSubmitting}
                   className="w-full text-white text-sm font-semibold py-2.5 rounded-xl transition disabled:opacity-50 mt-1"
-                  style={{ background: "linear-gradient(135deg, #8B5CF6 0%, #6C3CE1 100%)" }}
+                  style={{ background: "linear-gradient(135deg, #4F46E5 0%, #3730A3 100%)" }}
                 >
                   {isSubmitting
                     ? "処理中..."
