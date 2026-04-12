@@ -87,7 +87,6 @@ interface DebateResponse {
     isIntervention?: boolean;
   }[];
   interventionOccurred?: boolean;
-  needsClarification?: boolean;
   phaseCompleted?: boolean;
 }
 
@@ -114,7 +113,6 @@ export default function ChatInterface() {
   const [currentPhase, setCurrentPhase] = useState<Phase>(1);
   const [theme, setTheme] = useState<string>("");
   const [showNextPhaseButton, setShowNextPhaseButton] = useState(false);
-  const [needsClarification, setNeedsClarification] = useState(false);
 
   // 議論終了フロー
   const [showDoneConfirm, setShowDoneConfirm] = useState(false);
@@ -127,7 +125,7 @@ export default function ChatInterface() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, summary, showNextPhaseButton, needsClarification]);
+  }, [messages, summary, showNextPhaseButton]);
 
   useEffect(() => {
     getSessions()
@@ -394,7 +392,6 @@ export default function ChatInterface() {
       const data = (await res.json()) as DebateResponse;
 
       setPrevIntervened(!!data.interventionOccurred);
-      if (data.needsClarification) setNeedsClarification(true);
       if (data.phaseCompleted) setShowNextPhaseButton(true);
 
       await displayResponses(data.responses);
@@ -460,10 +457,6 @@ export default function ChatInterface() {
       lang === "ja"
         ? `次のフェーズへ（Phase ${nextPhase}：${PHASE_META[nextPhase].label.ja}）`
         : `Next Phase (Phase ${nextPhase}: ${PHASE_META[nextPhase].label.en})`,
-    clarificationBanner:
-      lang === "ja"
-        ? "⚠️ 競合・参入障壁が見つかりました。どうしますか？差別化案や方針をテキストで入力してください。"
-        : "⚠️ Competitors or barriers found. How would you like to proceed? Type your response or a pivot idea.",
   };
 
   const nextPhase = (currentPhase < 3 ? currentPhase + 1 : 3) as Phase;
@@ -649,15 +642,6 @@ export default function ChatInterface() {
             </div>
           );
         })}
-
-        {/* 障壁バナー */}
-        {needsClarification && !isLoading && (
-          <div className="flex justify-center px-2">
-            <div className="w-full max-w-lg px-4 py-3 bg-amber-50 border border-amber-300 rounded-xl text-sm text-amber-800 text-center leading-relaxed">
-              {L.clarificationBanner}
-            </div>
-          </div>
-        )}
 
         {/* 次のフェーズへボタン */}
         {showNextPhaseButton && currentPhase < 3 && !isLoading && !summary && (

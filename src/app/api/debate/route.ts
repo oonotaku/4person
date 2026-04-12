@@ -61,14 +61,9 @@ ${langInstruction}`,
 ## 発言ルール
 - 発案者の提示した案を明示的に参照した上で調査結果を述べる
 - 検索結果に基づいた事実ベースの発言のみ。憶測はNG
-- 競合・法規制・参入障壁が発見された場合：具体的に指摘し、ユーザーに「どうしますか？」と問い返す
-- 問題が見つからない場合：その旨を伝え、検証フェーズへの移行を促す
+- 競合・法規制・参入障壁が発見された場合：具体的な数字・事実を挙げて客観的に指摘する。「どうしますか？」などユーザーへの問い返しは絶対にしない
+- 発言の締めは「以上が現時点の調査結果です。」など事実報告で終わる
 - 3〜5文以内に収める
-
-## 内部フラグ（必須・省略不可）
-発言の最後の行に必ず以下のいずれか1つだけを出力すること：
-障壁あり・要確認の場合 → <<<NEEDS_CLARIFICATION>>>
-問題なし・クリアの場合 → <<<CLEAR>>>
 
 ## 制約
 ${noTagInstruction}
@@ -292,19 +287,13 @@ async function callClaudeWithSearch(
   });
 
   // テキストブロックをすべて結合
-  const rawText = response.content
+  const content = response.content
     .filter((b) => b.type === "text")
     .map((b) => (b as { type: "text"; text: string }).text)
     .join("\n")
     .trim();
 
-  const needsClarification = rawText.includes("<<<NEEDS_CLARIFICATION>>>");
-  const content = rawText
-    .replace("<<<NEEDS_CLARIFICATION>>>", "")
-    .replace("<<<CLEAR>>>", "")
-    .trim();
-
-  return { content, needsClarification };
+  return { content, needsClarification: false };
 }
 
 // ─── DB保存（失敗しても議論は続行） ─────────────────────────
@@ -467,13 +456,10 @@ export async function POST(request: Request) {
 
       for (const persona of respondingPersonas) {
         if (persona === "researcher") {
-          const { content: researcherContent, needsClarification } = await callClaudeWithSearch(language, chainMessages);
+          const { content: researcherContent } = await callClaudeWithSearch(language, chainMessages);
           results.push({ persona, content: researcherContent, isMain: true });
           await dbSaveMessage(sessionId, persona as Speaker, researcherContent);
           chainMessages.push({ role: "assistant", content: `[${persona}] ${researcherContent}` });
-          if (needsClarification) {
-            return Response.json({ responses: results, needsClarification: true, phaseCompleted: false });
-          }
         } else {
           const reply = await callClaude(persona, language, chainMessages);
           results.push({ persona, content: reply, isMain: true });
@@ -571,8 +557,7 @@ export async function POST(request: Request) {
 
       return Response.json({
         responses: results,
-        needsClarification,
-        phaseCompleted: !needsClarification,
+        phaseCompleted: true,
       });
     }
 
