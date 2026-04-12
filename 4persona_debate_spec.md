@@ -1,14 +1,43 @@
-# 4人格 壁打ちAI — MVP仕様書
+# FRICTION — 仕様書
 
-作成日：2026-03-27  
+アプリ名：FRICTION  
+キャッチコピー：「本当に強いアイデアは、反論に耐えたものだけだ。」  
+作成日：2026-03-27 / 最終更新：2026-04-12  
 作成者：Taku Ono  
-ステータス：MVP実装済み・SaaS化進行中
+本番URL：https://4person.vercel.app  
+GitHub：https://github.com/oonotaku/4person
 
 ---
 
 ## プロダクト概要
 
-プロダクト設計の壁打ちを目的とした、4つのAI人格が連鎖議論するWebアプリ。ユーザー（Taku）も会話に参加でき、特定の人格に宛てて発言できる。将来的に商用化を想定。
+ビジネスアイデアの壁打ちを目的とした、6つのAI人格がフェーズ制で連鎖議論するWebアプリ。ユーザーも会話に参加でき、特定の人格に宛てて発言できる。将来的に商用化を想定。
+
+---
+
+## 実装済み機能
+
+- 6人格による議論（全員・個別発言対応）
+- doneコマンドで議論終了＋サマリー自動生成（実行判断/条件/最初の一手）
+- サマリーをSupabaseに保存・再表示
+- セッション一覧で完了バッジ表示
+- 一覧に戻るボタン
+- Supabase Auth（メール/パスワード認証）
+- プロアクティブ介入システム（俯瞰者が4トリガーで単独介入）
+- Phase 1 発案者・調査者の対話ループ
+  - 発案者：通常時は2〜3案提示、ブラッシュアップ依頼時は1案のみ深掘り
+  - 調査者：Web検索で競合・市場・法規制をレポート
+  - 調査者の3段階判定：「勝てる余地あり」「勝てる余地は限定的」「参入障壁が高く厳しい」
+  - ①②③ 選択ボタンUI（needs_choice フラグで制御）
+    - ① この案をブラッシュアップする → 発案者に送信
+    - ② 全く新しい案を出してもらう → 発案者に送信
+    - ③ この案で次のフェーズに進む → タイトル入力モーダルを表示
+  - 調査者の吹き出し内の選択肢テキスト（「この結果を踏まえて…」）は非表示
+- ③ボタン押下時にタイトル入力モーダルを表示し、decided_idea_title をSupabaseに保存
+- フェーズステッパー直下にお題（theme）を常時表示
+- Phase 2以降で「📋 Phase1サマリーを見る」ボタンを表示
+  - Phase 1 サマリーポップアップ：決定案タイトル＋調査者の最終判定を表示
+- フェーズ名：発案（Phase 1）・検証（Phase 2）・統合（Phase 3）
 
 ---
 
@@ -23,92 +52,88 @@
 | 言語切り替え | 日本語・英語（UI内でトグル切り替え） |
 | 発言先指定 | 入力欄の上部でターゲット人格を選択（複数可・未選択で全員） |
 | 議論の開始 | テーマ（自由記述）を入力して送信 |
+| フェーズ表示 | 上部にフェーズステッパー（発案→検証→統合） |
+| フェーズ遷移 | 「次のフェーズへ」ボタンをユーザーが押す |
 
-### 4人格の定義
+### 6人格の定義
 
-#### 🟢 肯定者
+#### 💡 発案者（新規）
+- 役割：ビジネスアイデアを複数案生成し、可能性を広げる
+- スタイル：具体的な案を2〜3個提示する。根拠のない楽観はNG
+- 特記：調査者から「競合あり・障壁あり」の問い返しを受けた場合、差別化案を提示する
+- フェーズ：Phase 1【発案】で最初に発言
+- 発言ルール：通常は2〜3案提示。ブラッシュアップ依頼時は1案のみ深掘り（実装イメージ・ターゲット・差別化ポイントを盛り込む）
+
+#### 🔍 調査者（新規）
+- 役割：Web検索でリアルタイム情報を取得し、競合・市場規模・法規制を客観的にレポートする
+- スタイル：検索結果に基づいた事実ベースの発言のみ。憶測はNG
+- 特記：競合は「参入不可」でなく「市場が存在する証拠」として解釈し、「勝てる余地あり/限定的/参入障壁が高く厳しい」の3段階で結論を明示
+- 選択肢提示：レポート末尾に①②③の3択を提示し、needs_choice: true フラグを返す
+- フェーズ：Phase 1【発案】で発案者の後に発言
+- ツール：Anthropic web_searchツールを使用
+
+#### 🟢 肯定者（既存）
 - 役割：アイデア・議論の可能性を最大化する
-- 口癖：「実はここに大きなチャンスがある」「具体的な事例で言うと〜」
-- 締め方：可能性を数字で示す（例：「〜なら○○%の市場が取れる」）
-- NG：感情的な励まし、根拠のない楽観
+- スタイル：可能性を数字で示す。感情的な励まし・根拠のない楽観はNG
+- フェーズ：Phase 2【検証】で最初に発言
 
-#### 🔴 批判者
-- 役割：リスク・矛盾・穴を具体的に指摘する
-- 口癖：「一点だけ確認したい」「その前提は本当に正しいか」
-- 締め方：必ず問いで終わる（例：「〜という点はどう説明するのか」）
-- NG：人格攻撃、ただの否定
+#### 🔴 批判者（既存）
+- 役割：弱い前提・リスク・矛盾・穴を具体的に指摘する
+- スタイル：必ず問いで終わる。人格攻撃・ただの否定はNG
+- フェーズ：Phase 2【検証】で肯定者の後に発言
 
-#### 🔵 俯瞰者
+#### 🔵 俯瞰者（既存）
 - 役割：第三者として構造的・客観的に議論を整理する
-- 口癖：「構造的に見ると」「論点を整理すると3つある」
-- 締め方：「つまり本質的な問いは〜だ」
-- NG：どちらかに肩入れ、感情的な発言
+- スタイル：「つまり本質的な問いは〜だ」で締める。どちらかに肩入れ・感情的発言はNG
+- フェーズ：Phase 3【統合】で最初に発言
 
-#### ⚖️ 統合者
-- 役割：3人の議論を受けて現時点の最適解を出す
-- 口癖：「3人の議論を踏まえると」「現時点での最善手は」
-- 締め方：必ず「次のアクション：〜」で終わる
-- NG：曖昧な結論、アクションなしの締め
+#### ⚖️ 統合者（既存）
+- 役割：全人格の議論を受けて現時点の最適解を出す
+- スタイル：必ず「次のアクション：〜」で終わる。曖昧な結論・アクションなしはNG
+- フェーズ：Phase 3【統合】で俯瞰者の後に発言
 
-### 議論フロー
+### フェーズ制議論フロー
 
 ```
-1. Takuがテーマを入力
-2. 肯定者が最初に発言
-3. 批判者が肯定者の発言を受けて反論（連鎖）
-4. 俯瞰者が両者を踏まえて構造的に整理（連鎖）
-5. 統合者が現時点の最適解と次のアクションを出す（連鎖）
-6. Takuが発言先を指定して割り込む（任意）
-7. 指定された人格が返答 → 残り3人格も一言ずつ反応
-8. 6〜7を繰り返す
+【Phase 1：発案】アイデアをFixするフェーズ
+  1. ユーザーがテーマを入力
+  2. 発案者がアイデアを2〜3案提示
+  3. 調査者がWeb検索で競合・市場・法規制をレポート
+     └ レポート末尾に①②③の選択ボタンを表示（needs_choice: true）
+        ① この案をブラッシュアップする
+           → 発案者に送信。発案者は1案のみ深掘りして返す
+           → 調査者が再調査（ループ）
+        ② 全く新しい案を出してもらう
+           → 発案者に送信。発案者は別方向の2〜3案を提示
+           → 調査者が再調査（ループ）
+        ③ この案で次のフェーズに進む
+           → タイトル入力モーダルを表示
+           → タイトルを decided_idea_title としてSupabaseに保存
+           → 「次のフェーズへ」ボタンを表示
+
+【Phase 2：検証】アイデアを叩くフェーズ
+  4. 肯定者が可能性を検証
+  5. 批判者が弱点・リスクを指摘
+  6. ユーザーが「次のフェーズへ」を押す
+
+【Phase 3：統合】結論を出すフェーズ
+  7. 俯瞰者が議論を構造的に整理
+  8. 統合者が最適解と次のアクションを出す
 ```
 
-### Takuの参加ルール
+### ユーザーの参加ルール
 
-- 発言先を1人格に指定 → その人格がメインで返答、他3人格がサブで一言反応
+- 発言先を1人格に指定 → その人格がメインで返答
 - 発言先を複数指定 → 指定された人格が順番に返答
-- 発言先を未指定（全員）→ 4人格が順番に反応
+- 発言先を未指定（全員）→ 現フェーズの人格が順番に反応
 
-### 自動介入トリガー
+### プロアクティブ介入（実装済み）
 
-| トリガー | 条件 | 介入する人格 |
-|---|---|---|
-| 連続指定 | 同じ人格に2回連続で話しかけた場合 | 他の人格が3回目で割り込む |
-| 発言比率 | 特定人格への言及が全体の50%以上 | 少ない側の人格が介入 |
-| 感情的な議論 | 議論が感情的・主観的になった場合 | 俯瞰者が介入 |
-| 論点のずれ | 本題から離れた場合 | 俯瞰者が介入 |
-
-### ユーザーカスタマイズ（設定画面）
-
-```
-介入トリガー設定
-├ 連続指定の上限：[ 2 ] 回　（変更可）
-├ 発言比率の閾値：[ 50 ] %　（変更可）
-└ 介入の強さ：[ソフト / 標準 / アグレッシブ]　（変更可）
-```
-
----
-
-## 記憶・データ設計
-
-### A：セッション内記憶（MVP必須）
-
-- 会話中のTakuの発言を全てmessages配列に蓄積
-- 各人格はその会話内のTakuの発言傾向・矛盾を参照できる
-- ブラウザを閉じるとリセット
-
-### B：DB保存（MVP必須）
-
-- 使用DB：Supabase
-- 保存内容：会話履歴・テーマ・統合者の最終結論・タイムスタンプ
-- 次回ログイン時に過去の壁打ち一覧を表示
-- 「前回の続き」として会話を再開できる
-
-### C：ユーザープロファイル（商用化フェーズ）
-
-- SNS投稿履歴・過去の意思決定メモ等をインプット
-- Claudeがプロファイルを生成・保存
-- 4人格がプロファイルを参照して発言（傾向・クセへの言及）
+俯瞰者が以下の4パターンで単独介入し、ユーザーに問いを返す：
+1. 根拠のない主観的発言
+2. 根拠のない否定
+3. 根拠のない同意
+4. 短すぎる・不明瞭な発言
 
 ---
 
@@ -116,164 +141,143 @@
 
 | 項目 | 技術 |
 |---|---|
-| フロントエンド | Next.js（レスポンシブ） |
+| フロントエンド | Next.js + Tailwind CSS v3 |
 | バックエンド | Next.js API Routes |
 | AI | Anthropic API（claude-sonnet-4-20250514） |
-| DB | Supabase |
+| Web検索 | Anthropic web_searchツール（調査者専用） |
+| DB / Auth | Supabase |
 | デプロイ | Vercel |
 | バージョン管理 | GitHub |
+| 開発環境 | Windows / VSCode / PowerShell |
 
 ---
 
-## APIの呼び出し設計
-
-### 連鎖の仕組み
-
-```javascript
-// 各人格への呼び出しは順番に実行（並列ではない）
-// 前の人格の発言をmessagesに追加してから次を呼ぶ
-
-const messages = [
-  { role: "user", content: `テーマ：${theme}` }
-];
-
-// 1. 肯定者
-const affirmerResponse = await callClaude(AFFIRMER_PROMPT, messages);
-messages.push({ role: "assistant", content: `[肯定者] ${affirmerResponse}` });
-messages.push({ role: "user", content: "批判者として、上記を踏まえて発言せよ" });
-
-// 2. 批判者
-const criticResponse = await callClaude(CRITIC_PROMPT, messages);
-messages.push({ role: "assistant", content: `[批判者] ${criticResponse}` });
-messages.push({ role: "user", content: "俯瞰者として、上記を踏まえて発言せよ" });
-
-// 3. 俯瞰者
-const observerResponse = await callClaude(OBSERVER_PROMPT, messages);
-messages.push({ role: "assistant", content: `[俯瞰者] ${observerResponse}` });
-messages.push({ role: "user", content: "統合者として、3人の議論を踏まえて最適解と次のアクションを出せ" });
-
-// 4. 統合者
-const synthesizerResponse = await callClaude(SYNTHESIZER_PROMPT, messages);
-```
-
-### 各人格のシステムプロンプト構造
-
-```
-あなたは「{人格名}」です。
-
-## 役割
-{役割の説明}
-
-## 発言ルール
-- {口癖・スタイル}
-- {締め方}
-- {NGパターン}
-- 発言は3〜4文以内に収める
-
-## 介入ルール（批判者・俯瞰者のみ）
-以下の条件に該当する場合、通常の順番を無視して割り込む：
-- {介入トリガーの条件}
-
-## Takuの文脈参照
-会話履歴のTakuの発言から以下を把握して発言に反映する：
-- 発言傾向（楽観的か悲観的か）
-- 過去の主張との矛盾
-- よく使う前提・価値観
-
-## 言語
-{{language}}（日本語 または English）
-```
-
----
-
-## Supabaseスキーマ（概要）
+## Supabaseスキーマ（現状）
 
 ```sql
--- セッション（壁打きのテーマ単位）
 sessions (
   id uuid primary key,
   user_id uuid,
   theme text,
   language text,
   created_at timestamp,
-  final_conclusion text  -- 統合者の最終発言
+  final_conclusion text,
+  is_completed bool,
+  summary jsonb,           -- { verdict, verdict_reason, conditions[], first_step }
+  current_phase int,       -- 1 | 2 | 3
+  decided_idea_title text  -- ③ボタン確定時に保存するPhase 1の決定案タイトル
 )
 
--- メッセージ（発言履歴）
 messages (
   id uuid primary key,
   session_id uuid references sessions(id),
-  speaker text,  -- 'taku' | 'affirmer' | 'critic' | 'observer' | 'synthesizer'
+  speaker text,  -- 'taku' | 'proposer' | 'researcher' | 'affirmer' | 'critic' | 'observer' | 'synthesizer'
   content text,
-  target text,   -- Takuの発言先（nullなら全員）
+  target text,
   created_at timestamp
 )
+```
 
--- ユーザー設定
-user_settings (
-  user_id uuid primary key,
-  consecutive_limit int default 2,
-  bias_threshold int default 50,
-  intervention_strength text default 'standard'
-)
+**Supabase追加マイグレーション（2026-04-13実施）：**
+```sql
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS decided_idea_title text;
 ```
 
 ---
 
-## 実装状況（2026-03-28時点）
+## APIの呼び出し設計
 
-### デプロイ情報
+### フェーズ制連鎖の仕組み
 
-| 項目 | 内容 |
-|---|---|
-| 本番URL | https://4person.vercel.app |
-| GitHub | https://github.com/oonotaku/4person |
+```javascript
+// Phase 1：発案
+const proposerResponse = await callClaude(PROPOSER_PROMPT, messages);
+// 発案者：通常は2〜3案、ブラッシュアップ依頼時は1案深掘り
 
-### 実装済み機能
+const researcherResponse = await callClaudeWithSearch(RESEARCHER_PROMPT, messages);
+// 戻り値: { content, isDecided, needsChoice }
+// needsChoice: true → フロント側で①②③の選択ボタンを表示
+// isDecided: true  → phaseCompleted: true を返し「次のフェーズへ」ボタンを表示
 
-- 4人格の連鎖議論（肯定者→批判者→俯瞰者→統合者）
-- 宛先指定（指定人格がフル返答、他3人が1〜2文のサブコメント）
-- タグ除去・プロンプト調整済み
+// ① or ② が選ばれた場合: target=["proposer"] で再度 API 呼び出し → ループ
+// ③ が選ばれた場合: API呼び出しなし → タイトル入力モーダル → 次フェーズボタン
 
-### 次にやること
+// Phase 2：検証（ユーザーが「次のフェーズへ」を押した後）
+const affirmerResponse = await callClaude(AFFIRMER_PROMPT, messages);
+const criticResponse = await callClaude(CRITIC_PROMPT, messages);
 
-1. Supabase連携（会話履歴の保存・再開）
-2. Supabase Authでログイン機能
-3. Stripe課金でSaaS化
+// Phase 3：統合（ユーザーが「次のフェーズへ」を押した後）
+const observerResponse = await callClaude(OBSERVER_PROMPT, messages);
+const synthesizerResponse = await callClaude(SYNTHESIZER_PROMPT, messages);
+```
+
+### 調査者の決断検出マーカー
+
+```
+<<<NEEDS_CHOICE>>>  調査レポートの末尾に①②③の選択肢を提示した場合
+<<<IS_DECIDED>>>    ユーザーが①②③のいずれかを選択・決断した場合
+<<<CONTINUE>>>      その他（追加調査・通常の会話など）
+```
+
+### 調査者のWeb検索実装
+
+```javascript
+async function callClaudeWithSearch(systemPrompt, messages) {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 1500,
+      system: systemPrompt,
+      tools: [{ type: "web_search_20250305", name: "web_search" }],
+      messages,
+    }),
+  });
+  // needs_clarification フラグをレスポンスに含める
+}
+```
 
 ---
 
-## Claude Codeへの実装指示
-
-このファイルをプロジェクトに置いた上で、以下の順番で実装を依頼する：
+## Claude Codeへの実装指示（今回の変更分）
 
 ```
-Step 1: プロジェクトのセットアップ
-「Next.js + Supabase + Anthropic APIのプロジェクトをセットアップして。
-この仕様書に従って実装する。まずディレクトリ構造と必要なパッケージを準備して」
+4persona_debate_spec.md を読んで。
 
-Step 2: UI実装
-「チャット画面を実装して。仕様書のUI仕様に従うこと。
-レスポンシブ・発言先指定・言語切り替えを含める」
+今回実装したいのは以下の3点：
 
-Step 3: API実装
-「4人格の連鎖議論APIを実装して。仕様書のAPIの呼び出し設計に従うこと」
+【1】新人格2つの追加
+src/app/api/debate/route.ts の getSystemPrompt に以下を追加：
+- 発案者（proposer）：アイデアを2〜3案提示する役割
+- 調査者（researcher）：web_searchツールを使いリアルタイムで競合・市場・法規制を調べる役割。
+  障壁発見時は { needs_clarification: true, message: "..." } を返す。
+  クリア時は通常の発言を返す。
 
-Step 4: DB連携
-「Supabaseとの連携を実装して。仕様書のスキーマに従うこと」
+【2】フェーズ制フローの実装
+- セッションにcurrent_phase（1/2/3）を持たせる
+- Phase 1：発案者→調査者の順で実行
+- Phase 2：肯定者→批判者の順で実行（ユーザーが「次のフェーズへ」を押したとき）
+- Phase 3：俯瞰者→統合者の順で実行（ユーザーが「次のフェーズへ」を押したとき）
+- 調査者がneeds_clarification: trueを返した場合はフェーズを進めない
 
-Step 5: 介入トリガー実装
-「自動介入トリガーを実装して。連続指定2回・比率50%がデフォルト値」
+【3】UI変更
+- チャット画面上部にフェーズステッパーを追加
+  （① 発散 → ② 検証 → ③ 統合）現在のフェーズをハイライト
+- 発言先ボタンを6人格分に更新（発案者・調査者・肯定者・批判者・俯瞰者・統合者）
+- 調査者がneeds_clarification: trueを返した場合、
+  「障壁が見つかりました。どうしますか？」という形でユーザーへの問い返しUIを表示
+- 各フェーズの最後（調査者クリア後・批判者後・統合者後）に
+  「次のフェーズへ」ボタンを表示
 
-Step 6: 動作確認 → GitHub push → Vercelデプロイ
+既存機能（doneコマンド・Supabase保存・介入トリガー）はそのまま維持すること。
+実装はUX→フロントエンド→バックエンドの順で進めて。
 ```
 
 ---
 
-## 商用化フェーズで追加する機能
+## 今後の実装予定
 
-- ユーザー認証（Supabase Auth）
-- SNS履歴インプットによるプロファイル生成（C）
-- 人格の名前・キャラクターカスタマイズ
-- 壁打き結果のエクスポート（PDF・Markdown）
-- チーム機能（複数人で同じ壁打きに参加）
+- Stripe課金（3セッションまで無料、4回目から月額980円）
+- 調査者のWeb検索を有料プラン限定に切り替え
+- 会話履歴の保存・再開（Supabase）← 実装済み（2026-04-12）
