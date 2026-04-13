@@ -48,6 +48,14 @@ function getSystemPrompt(
 - ユーザーから「ブラッシュアップして」「深掘りして」「磨いて」等の深掘り依頼が来た場合、3案を並べるのではなく指定された1案のみを深掘りする。実装イメージ・ターゲット・差別化ポイントを具体的に盛り込んで1案に絞って提示する
 - 感情的な励まし・根拠のない楽観はNG
 
+## 決断検出（必須）
+2〜3案を新規提示した場合（通常提案・新案提示のいずれも）、発言本文の後に必ず以下の2行を付け加えること。タイトルは各案の内容を端的に表す15文字以内の短いラベルにする：
+
+{"proposals": ["案1の短いタイトル", "案2の短いタイトル", "案3の短いタイトル"]}
+<<<NEEDS_CHOICE>>>
+
+1案のみ深掘り（ブラッシュアップ・深掘り依頼）の場合はこれらを出力しないこと。
+
 ## 制約
 ${noTagInstruction}
 
@@ -58,7 +66,8 @@ ${langInstruction}`,
 
 ## 役割
 直前の発案者が提示した具体的な案を調査対象として、Web検索でリアルタイム情報を取得し、競合・市場規模・法規制を客観的にレポートする。
-ユーザーの元のテーマではなく、発案者が提示した各案の実現可能性を調べること。
+ユーザーの元のテーマではなく、発案者が提示した案の実現可能性を調べること。
+ユーザーが「〇〇を深掘りして」「〇〇について調査して」等で特定の案を名指しした場合は、その1案のみを調査すること。
 
 ## 発言ルール
 - 発案者の提示した案を明示的に参照した上で調査結果を述べる
@@ -288,6 +297,45 @@ async function callClaude(
   return block.text;
 }
 
+// ─── 発案者：提案タイトルJSON付きClaude呼び出し ─────────────
+async function callClaudeProposer(
+  language: "ja" | "en",
+  messages: { role: "user" | "assistant"; content: string }[]
+): Promise<{ content: string; needsChoice: boolean; proposals: string[] }> {
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: 1024,
+    system: getSystemPrompt("proposer", language),
+    messages,
+  });
+
+  const block = response.content[0];
+  if (block.type !== "text") throw new Error("Unexpected response type");
+  const rawText = block.text;
+
+  const needsChoice = rawText.includes("<<<NEEDS_CHOICE>>>");
+  let proposals: string[] = [];
+
+  if (needsChoice) {
+    const jsonMatch = rawText.match(/\{"proposals"\s*:\s*\[[\s\S]*?\]\}/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]) as { proposals?: unknown };
+        if (Array.isArray(parsed.proposals)) {
+          proposals = (parsed.proposals as unknown[]).slice(0, 3).map(String);
+        }
+      } catch {}
+    }
+  }
+
+  const content = rawText
+    .replace(/<<<NEEDS_CHOICE>>>/, "")
+    .replace(/\{"proposals"\s*:\s*\[[\s\S]*?\]\}/, "")
+    .trim();
+
+  return { content, needsChoice, proposals };
+}
+
 // ─── 調査者：Web検索付きClaude呼び出し ──────────────────────
 async function callClaudeWithSearch(
   language: "ja" | "en",
@@ -358,6 +406,7 @@ export async function POST(request: Request) {
     wasInterventionPrevious,
     phase = 1,
     isPhaseTransition = false,
+    isNewProposal = false,
   } = body as {
     theme: string;
     messages: { role: "user" | "assistant"; content: string }[];
@@ -368,6 +417,7 @@ export async function POST(request: Request) {
     wasInterventionPrevious?: boolean;
     phase?: 1 | 2 | 3;
     isPhaseTransition?: boolean;
+    isNewProposal?: boolean;
   };
 
   try {
@@ -470,6 +520,21 @@ export async function POST(request: Request) {
 
     console.log("[route.ts] phase:", phase, "target:", target, "→ respondingPersonas:", respondingPersonas);
 
+    // ─── ④新案依頼：発案者のみ呼び出して即返却 ──────────────
+    if (isNewProposal) {
+      const chainMessages: { role: "user" | "assistant"; content: string }[] = [
+        ...historyMessages,
+        { role: "user", content: userMessage ?? (language === "ja" ? "全く新しい案を出してください" : "Give me completely new proposals") },
+      ];
+      const { content, needsChoice: pnc, proposals } = await callClaudeProposer(language, chainMessages);
+      await dbSaveMessage(sessionId, "proposer", content);
+      return Response.json({
+        responses: [{ persona: "proposer", content, isMain: true }],
+        needsChoice: pnc,
+        proposals: pnc ? proposals : undefined,
+      });
+    }
+
     // ─── 特定人格への発言 ─────────────────────────────────────
     if (target && target.length > 0) {
       const chainMessages: { role: "user" | "assistant"; content: string }[] = [
@@ -479,9 +544,18 @@ export async function POST(request: Request) {
 
       let isDecidedByResearcher = false;
       let needsChoiceByResearcher = false;
+      let proposerNeedsChoice = false;
+      let proposerProposals: string[] = [];
 
       for (const persona of respondingPersonas) {
-        if (persona === "researcher") {
+        if (persona === "proposer") {
+          const { content, needsChoice: pnc, proposals } = await callClaudeProposer(language, chainMessages);
+          proposerNeedsChoice = pnc;
+          proposerProposals = proposals;
+          results.push({ persona, content, isMain: true });
+          await dbSaveMessage(sessionId, persona as Speaker, content);
+          chainMessages.push({ role: "assistant", content: `[${persona}] ${content}` });
+        } else if (persona === "researcher") {
           const { content: researcherContent, isDecided, needsChoice: nc } = await callClaudeWithSearch(language, chainMessages);
           isDecidedByResearcher = isDecided;
           needsChoiceByResearcher = nc;
@@ -517,10 +591,15 @@ export async function POST(request: Request) {
         }
       }
 
-      // Phase 1 では調査者の is_decided を phaseCompleted、needs_choice を needsChoice として返す
+      // Phase 1：調査者 or 発案者からの needs_choice・proposals を返す
       const phaseCompleted = phase === 1 ? isDecidedByResearcher : false;
-      const needsChoice = phase === 1 ? needsChoiceByResearcher : false;
-      return Response.json({ responses: results, phaseCompleted, needsChoice });
+      const needsChoiceResult = phase === 1 ? (needsChoiceByResearcher || proposerNeedsChoice) : false;
+      return Response.json({
+        responses: results,
+        phaseCompleted,
+        needsChoice: needsChoiceResult,
+        proposals: proposerNeedsChoice ? proposerProposals : undefined,
+      });
     }
 
     // ─── 全員への発言（現フェーズの人格が反応） ───────────────
@@ -565,31 +644,16 @@ export async function POST(request: Request) {
       return Response.json({ responses: results, interventionOccurred: true });
     }
 
-    // ─── Phase 1：発案者 → 調査者 ────────────────────────────
+    // ─── Phase 1：発案者のみ（案選択後に調査者を呼び出し） ────
     if (phase === 1) {
-      const proposerReply = await callClaude("proposer", language, chainMessages);
-      results.push({ persona: "proposer", content: proposerReply, isMain: true });
-      await dbSaveMessage(sessionId, "proposer", proposerReply);
-      chainMessages.push({
-        role: "assistant",
-        content: language === "ja" ? `[発案者] ${proposerReply}` : `[Proposer] ${proposerReply}`,
-      });
-
-      chainMessages.push({
-        role: "user",
-        content:
-          language === "ja"
-            ? "調査者として、発案者のアイデアについてWeb検索で競合・市場規模・法規制を調査してレポートせよ。"
-            : "As the Researcher, search the web for competitors, market size, and regulations related to the Proposer's ideas and report your findings.",
-      });
-      const { content: researcherContent, isDecided, needsChoice } = await callClaudeWithSearch(language, chainMessages);
-      results.push({ persona: "researcher", content: researcherContent, isMain: true });
-      await dbSaveMessage(sessionId, "researcher", researcherContent);
+      const { content: proposerContent, needsChoice: pnc, proposals } = await callClaudeProposer(language, chainMessages);
+      results.push({ persona: "proposer", content: proposerContent, isMain: true });
+      await dbSaveMessage(sessionId, "proposer", proposerContent);
 
       return Response.json({
         responses: results,
-        phaseCompleted: isDecided,
-        needsChoice,
+        needsChoice: pnc,
+        proposals: pnc ? proposals : undefined,
       });
     }
 

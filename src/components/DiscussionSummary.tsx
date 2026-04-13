@@ -11,11 +11,17 @@ interface Props {
   isLoading?: boolean;
   error?: string | null;
   onRetry?: () => void;
+  theme?: string;
+  decidedIdeaTitle?: string | null;
+  researcherVerdict?: string;
 }
 
 const LABELS = {
   ja: {
     title: "実行判断サマリー",
+    theme: "お題",
+    decidedIdea: "決定アイデア",
+    researcherVerdict: "調査者の判定",
     verdict: "実行判断",
     verdictReason: "判断理由",
     conditions: "実行に値する条件",
@@ -23,6 +29,7 @@ const LABELS = {
     copy: "コピー",
     copied: "コピー済み",
     print: "印刷",
+    pdf: "PDFで保存",
     loading: "サマリーを生成中...",
     loadingDetail: "4人格が議論内容を分析しています",
     error: "サマリーの生成に失敗しました",
@@ -30,6 +37,9 @@ const LABELS = {
   },
   en: {
     title: "Execution Verdict",
+    theme: "Topic",
+    decidedIdea: "Chosen Idea",
+    researcherVerdict: "Researcher's Verdict",
     verdict: "Verdict",
     verdictReason: "Reason",
     conditions: "Conditions for Execution",
@@ -37,6 +47,7 @@ const LABELS = {
     copy: "Copy",
     copied: "Copied",
     print: "Print",
+    pdf: "Save as PDF",
     loading: "Generating summary...",
     loadingDetail: "The 4 personas are analyzing the discussion",
     error: "Failed to generate summary",
@@ -62,7 +73,7 @@ function buildPlainText(summary: Summary, lang: Language): string {
   return lines.join("\n");
 }
 
-export default function DiscussionSummary({ summary, lang = "ja", isLoading, error, onRetry }: Props) {
+export default function DiscussionSummary({ summary, lang = "ja", isLoading, error, onRetry, theme, decidedIdeaTitle, researcherVerdict }: Props) {
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const L = LABELS[lang];
 
@@ -148,6 +159,101 @@ export default function DiscussionSummary({ summary, lang = "ja", isLoading, err
     window.print();
   }
 
+  function handleDownloadPdf() {
+    if (!summary) return;
+
+    const v = summary.verdict as string;
+    const verdictClass =
+      v === "実行すべき" || v === "Should execute"
+        ? "verdict-execute"
+        : v === "条件付きで実行すべき" || v === "Execute with conditions"
+        ? "verdict-conditional"
+        : "verdict-pass";
+
+    const conditionsHtml = summary.conditions
+      .map((c, i) => `<li><span class="cnum">${i + 1}</span><span>${c}</span></li>`)
+      .join("");
+
+    const themeBlock = theme
+      ? `<div class="section">
+          <div class="label">🎯 ${L.theme}</div>
+          <div class="val bold">${theme}</div>
+        </div><hr class="div">`
+      : "";
+
+    const ideaBlock = decidedIdeaTitle
+      ? `<div class="section">
+          <div class="label">💡 ${L.decidedIdea}</div>
+          <div class="val bold">${decidedIdeaTitle}</div>
+          ${researcherVerdict ? `<div class="researcher">🔍 ${L.researcherVerdict}：${researcherVerdict}</div>` : ""}
+        </div><hr class="div">`
+      : "";
+
+    const html = `<!DOCTYPE html>
+<html lang="${lang}">
+<head>
+<meta charset="UTF-8">
+<title>FRICTION サマリー${theme ? ` - ${theme}` : ""}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,"Helvetica Neue",sans-serif;color:#1f2937;background:#fff;padding:24px}
+@media print{body{padding:0}@page{margin:15mm}}
+.card{border:1px solid #93c5fd;border-radius:12px;overflow:hidden;max-width:680px;margin:0 auto}
+.header{background:#1d4ed8;padding:12px 20px}
+.header-title{color:#fff;font-size:14px;font-weight:700}
+.body{padding:20px;display:flex;flex-direction:column;gap:0}
+.section{margin-bottom:0}
+.label{font-size:11px;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.val{font-size:14px;color:#1f2937;line-height:1.6}
+.val.bold{font-weight:700}
+.div{border:none;border-top:1px solid #f3f4f6;margin:14px 0}
+.verdict-badge{display:inline-block;padding:3px 12px;border-radius:999px;font-size:14px;font-weight:700;border:1px solid;margin-bottom:6px}
+.verdict-execute{background:#f0fdf4;color:#15803d;border-color:#86efac}
+.verdict-conditional{background:#fffbeb;color:#b45309;border-color:#fcd34d}
+.verdict-pass{background:#fef2f2;color:#b91c1c;border-color:#fca5a5}
+.reason{margin-top:6px;font-size:14px;color:#374151;line-height:1.6}
+.clist{list-style:none;display:flex;flex-direction:column;gap:8px}
+.clist li{display:flex;gap:10px;font-size:14px;color:#1f2937;line-height:1.6}
+.cnum{width:18px;height:18px;min-width:18px;border-radius:50%;background:#dbeafe;color:#1d4ed8;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:3px}
+.first-step{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;font-size:14px;color:#1f2937;line-height:1.6;font-weight:500}
+.researcher{font-size:12px;color:#0f766e;margin-top:4px}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="header"><span class="header-title">📋 ${L.title}</span></div>
+  <div class="body">
+    ${themeBlock}
+    ${ideaBlock}
+    <div class="section">
+      <div class="label">⚖️ ${L.verdict}</div>
+      <span class="verdict-badge ${verdictClass}">${summary.verdict}</span>
+      <div class="reason">${summary.verdict_reason}</div>
+    </div>
+    <hr class="div">
+    <div class="section">
+      <div class="label">📋 ${L.conditions}</div>
+      <ul class="clist">${conditionsHtml}</ul>
+    </div>
+    <hr class="div">
+    <div class="section">
+      <div class="label">🚀 ${L.firstStep}</div>
+      <div class="first-step">${summary.first_step}</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
+
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.onafterprint = () => win.close();
+    setTimeout(() => win.print(), 400);
+  }
+
   return (
     <div className="mt-4 rounded-2xl border border-blue-300 bg-white shadow-md overflow-hidden print:shadow-none print:border-gray-300">
       {/* ヘッダー */}
@@ -182,11 +288,45 @@ export default function DiscussionSummary({ summary, lang = "ja", isLoading, err
             <PrintIcon />
             {L.print}
           </button>
+          <button
+            onClick={handleDownloadPdf}
+            aria-label={L.pdf}
+            className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors"
+          >
+            📄 {L.pdf}
+          </button>
         </div>
       </div>
 
       {/* カード本文 */}
       <div className="px-5 py-4 space-y-4">
+        {/* お題 */}
+        {theme && (
+          <section>
+            <SectionLabel text={L.theme} icon="🎯" />
+            <p className="mt-2 text-sm text-gray-800 leading-relaxed font-medium">{theme}</p>
+          </section>
+        )}
+
+        {/* 決定アイデア */}
+        {decidedIdeaTitle && (
+          <>
+            <div className="border-t border-gray-100" />
+            <section>
+              <SectionLabel text={L.decidedIdea} icon="💡" />
+              <p className="mt-2 text-sm text-gray-900 font-bold leading-relaxed">{decidedIdeaTitle}</p>
+              {researcherVerdict && (
+                <p className="mt-1 text-xs text-teal-700 flex items-center gap-1">
+                  <span>🔍</span>
+                  <span>{L.researcherVerdict}：{researcherVerdict}</span>
+                </p>
+              )}
+            </section>
+          </>
+        )}
+
+        {(theme || decidedIdeaTitle) && <div className="border-t border-gray-100" />}
+
         {/* 実行判断 */}
         <section>
           <SectionLabel text={L.verdict} icon="⚖️" />

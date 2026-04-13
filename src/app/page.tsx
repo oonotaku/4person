@@ -24,6 +24,7 @@ interface Message {
   content: string;
   target: Persona[] | "all";
   timestamp: Date;
+  isSeparator?: boolean;
 }
 
 // ─── 人格メタデータ ───────────────────────────────────────
@@ -91,6 +92,7 @@ interface DebateResponse {
   }[];
   phaseCompleted?: boolean;
   needsChoice?: boolean;
+  proposals?: string[];
 }
 
 // 調査者の選択肢テキストを除去
@@ -124,12 +126,14 @@ function HomeContent() {
   const [theme, setTheme] = useState<string>("");
   const [showNextPhaseButton, setShowNextPhaseButton] = useState(false);
   const [needsChoice, setNeedsChoice] = useState(false);
+  const [proposalTitles, setProposalTitles] = useState<string[]>([]);
 
   // Phase 1 決定アイデア管理
   const [decidedIdeaTitle, setDecidedIdeaTitle] = useState<string | null>(null);
   const [showDecideModal, setShowDecideModal] = useState(false);
   const [decideTitleInput, setDecideTitleInput] = useState("");
   const [showPhase1Summary, setShowPhase1Summary] = useState(false);
+  const [showDoneConfirm, setShowDoneConfirm] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -170,6 +174,7 @@ function HomeContent() {
       setMessages(loaded);
       setSessionId(id);
       setNeedsChoice(false);
+      setProposalTitles([]);
       setShowNextPhaseButton(false);
       setShowDecideModal(false);
       setShowPhase1Summary(false);
@@ -208,6 +213,7 @@ function HomeContent() {
     setTheme("");
     setShowNextPhaseButton(false);
     setNeedsChoice(false);
+    setProposalTitles([]);
     setDecidedIdeaTitle(null);
     setDecideTitleInput("");
     setShowDecideModal(false);
@@ -295,6 +301,7 @@ function HomeContent() {
       const typed = data as DebateResponse;
       if (typed.phaseCompleted) setShowNextPhaseButton(true);
       if (typed.needsChoice) setNeedsChoice(true);
+      if (typed.proposals && typed.proposals.length > 0) setProposalTitles(typed.proposals);
 
       // 順番に表示（300ms間隔）
       for (let i = 0; i < typed.responses.length; i++) {
@@ -402,6 +409,7 @@ function HomeContent() {
       const data = (await res.json()) as DebateResponse;
       if (data.phaseCompleted) setShowNextPhaseButton(true);
       if (data.needsChoice) setNeedsChoice(true);
+      if (data.proposals && data.proposals.length > 0) setProposalTitles(data.proposals);
 
       for (let i = 0; i < data.responses.length; i++) {
         const r = data.responses[i];
@@ -423,6 +431,92 @@ function HomeContent() {
       }
     } catch (err) {
       console.error("[handleChoice error]", err);
+    }
+
+    setIsLoading(false);
+  }
+
+  // 発案者の4択ボタン処理（案選択 or 新案依頼）
+  async function handleProposerChoice(idx: number) {
+    setNeedsChoice(false);
+    setProposalTitles([]);
+
+    const isNewProposals = idx === 3;
+    const selectedTitle = !isNewProposals ? proposalTitles[idx] : "";
+    const choiceText = isNewProposals
+      ? (lang === "ja" ? "④ 全く新しい案を出してもらう" : "④ Give me completely new proposals")
+      : (lang === "ja"
+          ? `「${selectedTitle}」を深掘りしてください`
+          : `Please deep-dive into "${selectedTitle}"`);
+    const targetPersona: Persona = isNewProposals ? "proposer" : "researcher";
+
+    const userMsg: Message = {
+      id: crypto.randomUUID(),
+      speaker: "taku",
+      content: choiceText,
+      target: [targetPersona],
+      timestamp: new Date(),
+    };
+
+    const historyForApi = messages
+      .filter((m) => m.speaker !== "taku")
+      .map((m) => ({
+        role: "assistant" as const,
+        content: `[${m.speaker}] ${m.content}`,
+      }));
+
+    setMessages((prev) => [...prev, userMsg]);
+    setIsLoading(true);
+
+    if (sessionId) {
+      saveMessage(sessionId, "taku", choiceText, targetPersona).catch((e) =>
+        console.error("[saveMessage proposerChoice error]", e)
+      );
+    }
+
+    try {
+      const res = await fetch("/api/debate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          theme,
+          messages: historyForApi,
+          target: [targetPersona],
+          userMessage: choiceText,
+          language: lang,
+          sessionId,
+          phase: currentPhase,
+          isNewProposal: isNewProposals,
+        }),
+      });
+
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+
+      const data = (await res.json()) as DebateResponse;
+      if (data.phaseCompleted) setShowNextPhaseButton(true);
+      if (data.needsChoice) setNeedsChoice(true);
+      if (data.proposals && data.proposals.length > 0) setProposalTitles(data.proposals);
+
+      for (let i = 0; i < data.responses.length; i++) {
+        const r = data.responses[i];
+        await new Promise<void>((resolve) => {
+          setTimeout(() => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: crypto.randomUUID(),
+                speaker: r.persona,
+                content: r.content,
+                target: "all" as const,
+                timestamp: new Date(),
+              },
+            ]);
+            resolve();
+          }, 300 * (i + 1));
+        });
+      }
+    } catch (err) {
+      console.error("[handleProposerChoice error]", err);
     }
 
     setIsLoading(false);
@@ -494,6 +588,27 @@ function HomeContent() {
       const data = (await res.json()) as DebateResponse;
       if (data.phaseCompleted) setShowNextPhaseButton(true);
 
+      // フェーズ開始セパレーターを挿入
+      const separatorContent =
+        nextPhase === 2
+          ? lang === "ja"
+            ? `✅ 検証フェーズ開始：${decidedIdeaTitle ?? theme}`
+            : `✅ Verification Phase Start: ${decidedIdeaTitle ?? theme}`
+          : lang === "ja"
+            ? `✅ 統合フェーズ開始`
+            : `✅ Integration Phase Start`;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          speaker: "taku" as Speaker,
+          content: separatorContent,
+          target: "all" as const,
+          timestamp: new Date(),
+          isSeparator: true,
+        },
+      ]);
+
       for (let i = 0; i < data.responses.length; i++) {
         const r = data.responses[i];
         await new Promise<void>((resolve) => {
@@ -524,6 +639,144 @@ function HomeContent() {
       e.preventDefault();
       handleSubmit();
     }
+  }
+
+  // 議論終了確定処理
+  async function handleDoneConfirm() {
+    setShowDoneConfirm(false);
+
+    const historyForApi = messages
+      .filter((m) => m.speaker !== "taku")
+      .map((m) => ({
+        role: "assistant" as const,
+        content: `[${m.speaker}] ${m.content}`,
+      }));
+
+    setIsLoading(true);
+
+    try {
+      const res = await fetch("/api/debate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          theme,
+          messages: historyForApi,
+          target: null,
+          userMessage: "done",
+          language: lang,
+          sessionId,
+          phase: currentPhase,
+        }),
+      });
+
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+
+      const data = await res.json();
+      if (data.isDone) {
+        setSummary(data.summary as Summary);
+      }
+    } catch (err) {
+      console.error("[handleDoneConfirm error]", err);
+    }
+
+    setIsLoading(false);
+  }
+
+  // PDFダウンロード処理
+  function handleDownloadPdf() {
+    if (!summary) return;
+
+    const v = summary.verdict as string;
+    const verdictClass =
+      v === "実行すべき" || v === "Should execute"
+        ? "verdict-execute"
+        : v === "条件付きで実行すべき" || v === "Execute with conditions"
+        ? "verdict-conditional"
+        : "verdict-pass";
+
+    const conditionsHtml = summary.conditions
+      .map((c, i) => `<li><span class="cnum">${i + 1}</span><span>${c}</span></li>`)
+      .join("");
+
+    const themeBlock = theme
+      ? `<div class="section">
+          <div class="label">🎯 ${lang === "ja" ? "お題" : "Topic"}</div>
+          <div class="val bold">${theme}</div>
+        </div><hr class="div">`
+      : "";
+
+    const researcherVerdict = extractResearcherVerdict(messages);
+    const ideaBlock = decidedIdeaTitle
+      ? `<div class="section">
+          <div class="label">💡 ${lang === "ja" ? "決定アイデア" : "Chosen Idea"}</div>
+          <div class="val bold">${decidedIdeaTitle}</div>
+          ${researcherVerdict ? `<div class="researcher">🔍 ${lang === "ja" ? "調査者の判定" : "Researcher's Verdict"}：${researcherVerdict}</div>` : ""}
+        </div><hr class="div">`
+      : "";
+
+    const html = `<!DOCTYPE html>
+<html lang="${lang}">
+<head>
+<meta charset="UTF-8">
+<title>FRICTION サマリー${theme ? ` - ${theme}` : ""}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,"Helvetica Neue",sans-serif;color:#1f2937;background:#fff;padding:24px}
+@media print{body{padding:0}@page{margin:15mm}}
+.card{border:1px solid #93c5fd;border-radius:12px;overflow:hidden;max-width:680px;margin:0 auto}
+.header{background:#1d4ed8;padding:12px 20px}
+.header-title{color:#fff;font-size:14px;font-weight:700}
+.body{padding:20px;display:flex;flex-direction:column;gap:0}
+.section{margin-bottom:0}
+.label{font-size:11px;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.val{font-size:14px;color:#1f2937;line-height:1.6}
+.val.bold{font-weight:700}
+.div{border:none;border-top:1px solid #f3f4f6;margin:14px 0}
+.verdict-badge{display:inline-block;padding:3px 12px;border-radius:999px;font-size:14px;font-weight:700;border:1px solid;margin-bottom:6px}
+.verdict-execute{background:#f0fdf4;color:#15803d;border-color:#86efac}
+.verdict-conditional{background:#fffbeb;color:#b45309;border-color:#fcd34d}
+.verdict-pass{background:#fef2f2;color:#b91c1c;border-color:#fca5a5}
+.reason{margin-top:6px;font-size:14px;color:#374151;line-height:1.6}
+.clist{list-style:none;display:flex;flex-direction:column;gap:8px}
+.clist li{display:flex;gap:10px;font-size:14px;color:#1f2937;line-height:1.6}
+.cnum{width:18px;height:18px;min-width:18px;border-radius:50%;background:#dbeafe;color:#1d4ed8;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:3px}
+.first-step{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;font-size:14px;color:#1f2937;line-height:1.6;font-weight:500}
+.researcher{font-size:12px;color:#0f766e;margin-top:4px}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="header"><span class="header-title">📋 ${lang === "ja" ? "実行判断サマリー" : "Execution Verdict"}</span></div>
+  <div class="body">
+    ${themeBlock}
+    ${ideaBlock}
+    <div class="section">
+      <div class="label">⚖️ ${lang === "ja" ? "実行判断" : "Verdict"}</div>
+      <span class="verdict-badge ${verdictClass}">${summary.verdict}</span>
+      <div class="reason">${summary.verdict_reason}</div>
+    </div>
+    <hr class="div">
+    <div class="section">
+      <div class="label">📋 ${lang === "ja" ? "実行に値する条件" : "Conditions for Execution"}</div>
+      <ul class="clist">${conditionsHtml}</ul>
+    </div>
+    <hr class="div">
+    <div class="section">
+      <div class="label">🚀 ${lang === "ja" ? "最初の一手" : "First Step"}</div>
+      <div class="first-step">${summary.first_step}</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
+
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.onafterprint = () => win.close();
+    setTimeout(() => win.print(), 400);
   }
 
   // ─── ラベル ────────────────────────────────────────────
@@ -767,6 +1020,34 @@ function HomeContent() {
             </div>
           )}
 
+          {/* 議論終了確認ダイアログ */}
+          {showDoneConfirm && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+              <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4">
+                <h2 className="text-base font-bold text-gray-800 mb-2">
+                  {lang === "ja" ? "本当に議論を終了しますか？" : "End the discussion?"}
+                </h2>
+                <p className="text-sm text-gray-500 mb-6">
+                  {lang === "ja" ? "この操作は取り消せません。" : "This action cannot be undone."}
+                </p>
+                <div className="flex gap-3 justify-end">
+                  <button
+                    onClick={() => setShowDoneConfirm(false)}
+                    className="text-sm px-4 py-2 rounded-xl border border-gray-300 bg-white hover:bg-gray-100 text-gray-600 font-medium transition-colors"
+                  >
+                    {lang === "ja" ? "キャンセル" : "Cancel"}
+                  </button>
+                  <button
+                    onClick={handleDoneConfirm}
+                    className="text-sm px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-medium transition-colors"
+                  >
+                    {lang === "ja" ? "終了する" : "End"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* フェーズステッパー（小・常時表示） */}
           <div className="flex items-center justify-center gap-0 px-4 py-2.5 bg-white border-b border-gray-100 shadow-sm relative shrink-0">
             {([1, 2, 3] as Phase[]).map((p, idx) => {
@@ -823,6 +1104,18 @@ function HomeContent() {
           {/* メッセージエリア */}
           <main className="flex-1 overflow-y-auto px-4 py-4 space-y-3 max-w-3xl w-full mx-auto">
             {messages.map((msg) => {
+              // フェーズ開始セパレーター
+              if (msg.isSeparator) {
+                return (
+                  <div key={msg.id} className="flex items-center gap-3 py-3">
+                    <div className="flex-1 h-px bg-blue-200" />
+                    <span className="shrink-0 text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-3 py-1 rounded-full">
+                      {msg.content}
+                    </span>
+                    <div className="flex-1 h-px bg-blue-200" />
+                  </div>
+                );
+              }
               if (msg.speaker === "taku") {
                 return (
                   <div key={msg.id} className="flex justify-end">
@@ -885,13 +1178,50 @@ function HomeContent() {
 
             {summary && (
               <div className="mt-2 rounded-2xl border border-blue-300 bg-white shadow-md overflow-hidden">
-                <div className="px-5 py-3 bg-blue-700">
+                <div className="flex items-center justify-between px-5 py-3 bg-blue-700">
                   <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
-                    <span aria-hidden="true">⚖️</span>
+                    <span aria-hidden="true">📋</span>
                     {lang === "ja" ? "実行判断サマリー" : "Execution Verdict"}
                   </h3>
+                  <button
+                    onClick={handleDownloadPdf}
+                    className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors"
+                  >
+                    📄 {lang === "ja" ? "PDFで保存" : "Save as PDF"}
+                  </button>
                 </div>
                 <div className="px-5 py-4 space-y-4">
+                  {/* お題 */}
+                  {theme && (
+                    <section>
+                      <p className="text-xs font-bold text-blue-700 uppercase tracking-wide mb-2">
+                        🎯 {lang === "ja" ? "お題" : "Topic"}
+                      </p>
+                      <p className="text-sm text-gray-800 leading-relaxed font-medium">{theme}</p>
+                    </section>
+                  )}
+
+                  {/* 決定アイデア */}
+                  {decidedIdeaTitle && (
+                    <>
+                      <div className="border-t border-gray-100" />
+                      <section>
+                        <p className="text-xs font-bold text-blue-700 uppercase tracking-wide mb-2">
+                          💡 {lang === "ja" ? "決定アイデア" : "Chosen Idea"}
+                        </p>
+                        <p className="text-sm text-gray-900 font-bold leading-relaxed">{decidedIdeaTitle}</p>
+                        {extractResearcherVerdict(messages) && (
+                          <p className="mt-1 text-xs text-teal-700 flex items-center gap-1">
+                            <span>🔍</span>
+                            <span>{lang === "ja" ? "調査者の判定" : "Researcher's Verdict"}：{extractResearcherVerdict(messages)}</span>
+                          </p>
+                        )}
+                      </section>
+                    </>
+                  )}
+
+                  {(theme || decidedIdeaTitle) && <div className="border-t border-gray-100" />}
+
                   <section>
                     <p className="text-xs font-bold text-blue-700 uppercase tracking-wide mb-2">
                       ⚖️ {lang === "ja" ? "実行判断" : "Verdict"}
@@ -934,30 +1264,54 @@ function HomeContent() {
           {/* 入力エリア */}
           <div className="bg-white border-t border-gray-200 px-4 pt-3 pb-4 max-w-3xl w-full mx-auto shrink-0">
             {needsChoice && !isLoading ? (
-              /* 調査者の3択ボタン */
-              <div className="space-y-2">
-                <p className="text-xs text-teal-700 font-semibold flex items-center gap-1">
-                  🔍 {lang === "ja" ? "調査者からの提案：選択してください" : "Researcher's proposal: choose an option"}
-                </p>
-                <button
-                  onClick={() => handleChoice(1)}
-                  className="w-full text-left px-4 py-3 bg-white border border-teal-300 rounded-xl text-sm text-gray-800 hover:bg-teal-50 transition-colors font-medium"
-                >
-                  {lang === "ja" ? "① この案をブラッシュアップする" : "① Brush up this idea"}
-                </button>
-                <button
-                  onClick={() => handleChoice(2)}
-                  className="w-full text-left px-4 py-3 bg-white border border-teal-300 rounded-xl text-sm text-gray-800 hover:bg-teal-50 transition-colors font-medium"
-                >
-                  {lang === "ja" ? "② 全く新しい案を出してもらう" : "② Give me a completely new idea"}
-                </button>
-                <button
-                  onClick={() => handleChoice(3)}
-                  className="w-full text-left px-4 py-3 bg-white border border-blue-300 rounded-xl text-sm text-gray-800 hover:bg-blue-50 transition-colors font-medium"
-                >
-                  {lang === "ja" ? "③ この案で次のフェーズに進む" : "③ Proceed to next phase with this idea"}
-                </button>
-              </div>
+              proposalTitles.length > 0 ? (
+                /* 発案者の4択ボタン（どの案を調査するか選択） */
+                <div className="space-y-2">
+                  <p className="text-xs text-yellow-700 font-semibold flex items-center gap-1">
+                    💡 {lang === "ja" ? "発案者からの提案：調査する案を選んでください" : "Proposer's proposals: choose one to investigate"}
+                  </p>
+                  {proposalTitles.map((title, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleProposerChoice(idx)}
+                      className="w-full text-left px-4 py-3 bg-white border border-yellow-300 rounded-xl text-sm text-gray-800 hover:bg-yellow-50 transition-colors font-medium"
+                    >
+                      {["①", "②", "③"][idx]} {lang === "ja" ? `「${title}」を深掘りする` : `Deep-dive into "${title}"`}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => handleProposerChoice(3)}
+                    className="w-full text-left px-4 py-3 bg-white border border-gray-300 rounded-xl text-sm text-gray-800 hover:bg-gray-50 transition-colors font-medium"
+                  >
+                    {lang === "ja" ? "④ 全く新しい案を出してもらう" : "④ Give me completely new proposals"}
+                  </button>
+                </div>
+              ) : (
+                /* 調査者の3択ボタン（現状通り） */
+                <div className="space-y-2">
+                  <p className="text-xs text-teal-700 font-semibold flex items-center gap-1">
+                    🔍 {lang === "ja" ? "調査者からの提案：選択してください" : "Researcher's proposal: choose an option"}
+                  </p>
+                  <button
+                    onClick={() => handleChoice(1)}
+                    className="w-full text-left px-4 py-3 bg-white border border-teal-300 rounded-xl text-sm text-gray-800 hover:bg-teal-50 transition-colors font-medium"
+                  >
+                    {lang === "ja" ? "① この案をブラッシュアップする" : "① Brush up this idea"}
+                  </button>
+                  <button
+                    onClick={() => handleChoice(2)}
+                    className="w-full text-left px-4 py-3 bg-white border border-teal-300 rounded-xl text-sm text-gray-800 hover:bg-teal-50 transition-colors font-medium"
+                  >
+                    {lang === "ja" ? "② 全く新しい案を出してもらう" : "② Give me a completely new idea"}
+                  </button>
+                  <button
+                    onClick={() => handleChoice(3)}
+                    className="w-full text-left px-4 py-3 bg-white border border-blue-300 rounded-xl text-sm text-gray-800 hover:bg-blue-50 transition-colors font-medium"
+                  >
+                    {lang === "ja" ? "③ この案で次のフェーズに進む" : "③ Proceed to next phase with this idea"}
+                  </button>
+                </div>
+              )
             ) : (
               <>
                 {/* 発言先トグル */}
@@ -1012,6 +1366,17 @@ function HomeContent() {
                     <span className="text-[10px] font-normal opacity-75">{L.sendHint}</span>
                   </button>
                 </div>
+                {/* 議論終了ボタン */}
+                {!summary && !isLoading && (
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      onClick={() => setShowDoneConfirm(true)}
+                      className="text-xs text-gray-400 hover:text-red-500 transition-colors font-medium px-2 py-1 rounded-lg hover:bg-red-50"
+                    >
+                      🏁 {lang === "ja" ? "議論を終了する" : "End discussion"}
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>

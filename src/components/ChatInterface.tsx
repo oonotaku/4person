@@ -20,6 +20,7 @@ interface Message {
   target: Persona[] | "all";
   timestamp: Date;
   isIntervention?: boolean;
+  isSeparator?: boolean;
 }
 
 // ─── 人格メタデータ ───────────────────────────────────────
@@ -89,6 +90,7 @@ interface DebateResponse {
   interventionOccurred?: boolean;
   phaseCompleted?: boolean;
   needsChoice?: boolean;
+  proposals?: string[];
 }
 
 // ─── フェーズ推定（過去セッション用） ────────────────────
@@ -131,6 +133,7 @@ export default function ChatInterface() {
   const [theme, setTheme] = useState<string>("");
   const [showNextPhaseButton, setShowNextPhaseButton] = useState(false);
   const [needsChoice, setNeedsChoice] = useState(false);
+  const [proposalTitles, setProposalTitles] = useState<string[]>([]);
 
   // Phase 1 決定アイデア管理
   const [decidedIdeaTitle, setDecidedIdeaTitle] = useState<string | null>(null);
@@ -198,6 +201,7 @@ export default function ChatInterface() {
       setPrevIntervened(false);
       setShowNextPhaseButton(false);
       setNeedsChoice(false);
+      setProposalTitles([]);
       setShowDecideModal(false);
       setShowPhase1Summary(false);
 
@@ -236,6 +240,7 @@ export default function ChatInterface() {
     setTheme("");
     setShowNextPhaseButton(false);
     setNeedsChoice(false);
+    setProposalTitles([]);
     setDecidedIdeaTitle(null);
     setDecideTitleInput("");
     setShowDecideModal(false);
@@ -337,6 +342,27 @@ export default function ChatInterface() {
 
       if (data.phaseCompleted) setShowNextPhaseButton(true);
 
+      // フェーズ開始セパレーターを挿入
+      const separatorContent =
+        nextPhase === 2
+          ? lang === "ja"
+            ? `✅ 検証フェーズ開始：${decidedIdeaTitle ?? theme}`
+            : `✅ Verification Phase Start: ${decidedIdeaTitle ?? theme}`
+          : lang === "ja"
+            ? `✅ 統合フェーズ開始`
+            : `✅ Integration Phase Start`;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          speaker: "taku" as Speaker,
+          content: separatorContent,
+          target: "all" as const,
+          timestamp: new Date(),
+          isSeparator: true,
+        },
+      ]);
+
       await displayResponses(data.responses);
     } catch (err) {
       console.error("[handleNextPhase error]", err);
@@ -426,6 +452,7 @@ export default function ChatInterface() {
       setPrevIntervened(!!data.interventionOccurred);
       if (data.phaseCompleted) setShowNextPhaseButton(true);
       if (data.needsChoice) setNeedsChoice(true);
+      if (data.proposals && data.proposals.length > 0) setProposalTitles(data.proposals);
 
       await displayResponses(data.responses);
 
@@ -516,10 +543,82 @@ export default function ChatInterface() {
       setPrevIntervened(!!data.interventionOccurred);
       if (data.phaseCompleted) setShowNextPhaseButton(true);
       if (data.needsChoice) setNeedsChoice(true);
+      if (data.proposals && data.proposals.length > 0) setProposalTitles(data.proposals);
 
       await displayResponses(data.responses);
     } catch (err) {
       console.error("[handleChoice error]", err);
+    }
+
+    setIsLoading(false);
+  }
+
+  // 発案者の4択ボタン処理（案選択 or 新案依頼）
+  async function handleProposerChoice(idx: number) {
+    setNeedsChoice(false);
+    setProposalTitles([]);
+
+    const isNewProposals = idx === 3;
+    const selectedTitle = !isNewProposals ? proposalTitles[idx] : "";
+    const choiceText = isNewProposals
+      ? (lang === "ja" ? "④ 全く新しい案を出してもらう" : "④ Give me completely new proposals")
+      : (lang === "ja"
+          ? `「${selectedTitle}」を深掘りしてください`
+          : `Please deep-dive into "${selectedTitle}"`);
+    const targetPersona: Persona = isNewProposals ? "proposer" : "researcher";
+
+    const userMsg: Message = {
+      id: crypto.randomUUID(),
+      speaker: "taku",
+      content: choiceText,
+      target: [targetPersona],
+      timestamp: new Date(),
+    };
+
+    const historyForApi = messages
+      .filter((m) => m.speaker !== "taku")
+      .map((m) => ({
+        role: "assistant" as const,
+        content: `[${m.speaker}] ${m.content}`,
+      }));
+
+    setMessages((prev) => [...prev, userMsg]);
+    setIsLoading(true);
+
+    if (sessionId) {
+      saveMessage(sessionId, "taku", choiceText, targetPersona).catch((e) =>
+        console.error("[saveMessage proposerChoice error]", e)
+      );
+    }
+
+    try {
+      const res = await fetch("/api/debate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          theme,
+          messages: historyForApi,
+          target: [targetPersona],
+          userMessage: choiceText,
+          language: lang,
+          sessionId,
+          wasInterventionPrevious: prevIntervened,
+          phase: currentPhase,
+          isNewProposal: isNewProposals,
+        }),
+      });
+
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+
+      const data = (await res.json()) as DebateResponse;
+      setPrevIntervened(!!data.interventionOccurred);
+      if (data.phaseCompleted) setShowNextPhaseButton(true);
+      if (data.needsChoice) setNeedsChoice(true);
+      if (data.proposals && data.proposals.length > 0) setProposalTitles(data.proposals);
+
+      await displayResponses(data.responses);
+    } catch (err) {
+      console.error("[handleProposerChoice error]", err);
     }
 
     setIsLoading(false);
@@ -800,6 +899,18 @@ export default function ChatInterface() {
         )}
 
         {messages.map((msg) => {
+          // フェーズ開始セパレーター
+          if (msg.isSeparator) {
+            return (
+              <div key={msg.id} className="flex items-center gap-3 py-3">
+                <div className="flex-1 h-px bg-blue-200" />
+                <span className="shrink-0 text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-3 py-1 rounded-full">
+                  {msg.content}
+                </span>
+                <div className="flex-1 h-px bg-blue-200" />
+              </div>
+            );
+          }
           if (msg.speaker === "taku") {
             return (
               <div key={msg.id} className="flex justify-end">
@@ -882,6 +993,9 @@ export default function ChatInterface() {
             isLoading={isSummarizing}
             error={summaryError}
             onRetry={generateSummary}
+            theme={theme}
+            decidedIdeaTitle={decidedIdeaTitle}
+            researcherVerdict={extractResearcherVerdict(messages)}
           />
         )}
 
@@ -899,30 +1013,54 @@ export default function ChatInterface() {
         )}
 
         {needsChoice && !isLoading && !summary ? (
-          /* 調査者の3択ボタン */
-          <div className="space-y-2">
-            <p className="text-xs text-teal-700 font-semibold flex items-center gap-1">
-              🔍 {lang === "ja" ? "調査者からの提案：選択してください" : "Researcher's proposal: choose an option"}
-            </p>
-            <button
-              onClick={() => handleChoice(1)}
-              className="w-full text-left px-4 py-3 bg-white border border-teal-300 rounded-xl text-sm text-gray-800 hover:bg-teal-50 transition-colors font-medium"
-            >
-              {lang === "ja" ? "① この案をブラッシュアップする" : "① Brush up this idea"}
-            </button>
-            <button
-              onClick={() => handleChoice(2)}
-              className="w-full text-left px-4 py-3 bg-white border border-teal-300 rounded-xl text-sm text-gray-800 hover:bg-teal-50 transition-colors font-medium"
-            >
-              {lang === "ja" ? "② 全く新しい案を出してもらう" : "② Give me a completely new idea"}
-            </button>
-            <button
-              onClick={() => handleChoice(3)}
-              className="w-full text-left px-4 py-3 bg-white border border-blue-300 rounded-xl text-sm text-gray-800 hover:bg-blue-50 transition-colors font-medium"
-            >
-              {lang === "ja" ? "③ この案で次のフェーズに進む" : "③ Proceed to next phase with this idea"}
-            </button>
-          </div>
+          proposalTitles.length > 0 ? (
+            /* 発案者の4択ボタン（どの案を調査するか選択） */
+            <div className="space-y-2">
+              <p className="text-xs text-yellow-700 font-semibold flex items-center gap-1">
+                💡 {lang === "ja" ? "発案者からの提案：調査する案を選んでください" : "Proposer's proposals: choose one to investigate"}
+              </p>
+              {proposalTitles.map((title, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleProposerChoice(idx)}
+                  className="w-full text-left px-4 py-3 bg-white border border-yellow-300 rounded-xl text-sm text-gray-800 hover:bg-yellow-50 transition-colors font-medium"
+                >
+                  {["①", "②", "③"][idx]} {lang === "ja" ? `「${title}」を深掘りする` : `Deep-dive into "${title}"`}
+                </button>
+              ))}
+              <button
+                onClick={() => handleProposerChoice(3)}
+                className="w-full text-left px-4 py-3 bg-white border border-gray-300 rounded-xl text-sm text-gray-800 hover:bg-gray-50 transition-colors font-medium"
+              >
+                {lang === "ja" ? "④ 全く新しい案を出してもらう" : "④ Give me completely new proposals"}
+              </button>
+            </div>
+          ) : (
+            /* 調査者の3択ボタン（現状通り） */
+            <div className="space-y-2">
+              <p className="text-xs text-teal-700 font-semibold flex items-center gap-1">
+                🔍 {lang === "ja" ? "調査者からの提案：選択してください" : "Researcher's proposal: choose an option"}
+              </p>
+              <button
+                onClick={() => handleChoice(1)}
+                className="w-full text-left px-4 py-3 bg-white border border-teal-300 rounded-xl text-sm text-gray-800 hover:bg-teal-50 transition-colors font-medium"
+              >
+                {lang === "ja" ? "① この案をブラッシュアップする" : "① Brush up this idea"}
+              </button>
+              <button
+                onClick={() => handleChoice(2)}
+                className="w-full text-left px-4 py-3 bg-white border border-teal-300 rounded-xl text-sm text-gray-800 hover:bg-teal-50 transition-colors font-medium"
+              >
+                {lang === "ja" ? "② 全く新しい案を出してもらう" : "② Give me a completely new idea"}
+              </button>
+              <button
+                onClick={() => handleChoice(3)}
+                className="w-full text-left px-4 py-3 bg-white border border-blue-300 rounded-xl text-sm text-gray-800 hover:bg-blue-50 transition-colors font-medium"
+              >
+                {lang === "ja" ? "③ この案で次のフェーズに進む" : "③ Proceed to next phase with this idea"}
+              </button>
+            </div>
+          )
         ) : (
           <>
             {/* 発言先トグル（6人格） */}
@@ -978,6 +1116,17 @@ export default function ChatInterface() {
                 <span className="text-[10px] font-normal opacity-75">{L.sendHint}</span>
               </button>
             </div>
+            {/* 議論終了ボタン */}
+            {!summary && !isLoading && !isSummarizing && (
+              <div className="mt-2 flex justify-end">
+                <button
+                  onClick={() => setShowDoneConfirm(true)}
+                  className="text-xs text-gray-400 hover:text-red-500 transition-colors font-medium px-2 py-1 rounded-lg hover:bg-red-50"
+                >
+                  🏁 {lang === "ja" ? "議論を終了する" : "End discussion"}
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>
