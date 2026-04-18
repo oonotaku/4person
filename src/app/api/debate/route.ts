@@ -408,9 +408,9 @@ async function callClaudeWithSearch(
     .replace(/^[-・]\s*/gm, "\n・")
     .trim();
 
-  const paragraphs = formattedContent.split(/\n\n+/);
-  const summary = paragraphs[0].trim();
-  const detail = paragraphs.slice(1).join("\n\n").trim() || null;
+  const lines = formattedContent.split(/\n/).filter(l => l.trim() !== "");
+  const summary = lines.slice(0, 3).join("\n");
+  const detail = lines.length > 3 ? lines.slice(3).join("\n") : null;
 
   return { content: formattedContent, summary, detail, isDecided, needsChoice };
 }
