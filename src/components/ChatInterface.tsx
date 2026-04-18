@@ -106,15 +106,13 @@ function stripResearcherChoiceText(content: string): string {
   return content.replace(/この結果を踏まえて、どうしますか？[\s\S]*$/, "").trim();
 }
 
-// 調査者コンテンツを <<<DETAIL>>> で分割
+// 調査者コンテンツを <<<DETAIL>>> で分割（スペース・改行を含む揺れに対応）
 function parseResearcherContent(content: string): { summary: string; detail: string | null } {
-  const marker = "<<<DETAIL>>>";
-  const idx = content.indexOf(marker);
-  if (idx === -1) return { summary: stripResearcherChoiceText(content), detail: null };
-  return {
-    summary: content.slice(0, idx).trim(),
-    detail: stripResearcherChoiceText(content.slice(idx + marker.length).trim()) || null,
-  };
+  const match = content.match(/<<<\s*DETAIL\s*>>>/);
+  if (!match || match.index === undefined) return { summary: stripResearcherChoiceText(content), detail: null };
+  const summary = content.slice(0, match.index).trim();
+  const detail = stripResearcherChoiceText(content.slice(match.index + match[0].length).trim()) || null;
+  return { summary, detail };
 }
 
 // 調査者の最終判定テキストを抽出
@@ -1009,15 +1007,9 @@ export default function ChatInterface() {
                   className={`${meta.bgClass} border ${
                     msg.isIntervention ? "border-amber-400 ring-1 ring-amber-300" : meta.borderClass
                   } px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed shadow-sm text-gray-800`}
+                  style={msg.speaker === "proposer" ? { whiteSpace: "pre-wrap" } : undefined}
                 >
-                  {msg.speaker === "proposer"
-                    ? msg.content.split("\n").map((line, i, arr) => (
-                        <React.Fragment key={i}>
-                          {line}
-                          {i < arr.length - 1 && <br />}
-                        </React.Fragment>
-                      ))
-                    : msg.content}
+                  {msg.content}
                 </div>
               </div>
             </div>
