@@ -1008,7 +1008,7 @@ export default function ChatInterface() {
                 <div
                   className={`${meta.bgClass} border ${
                     msg.isIntervention ? "border-amber-400 ring-1 ring-amber-300" : meta.borderClass
-                  } px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed shadow-sm text-gray-800`}
+                  } px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed shadow-sm text-gray-800 whitespace-pre-wrap`}
                 >
                   {msg.content}
                 </div>
