@@ -106,6 +106,17 @@ function stripResearcherChoiceText(content: string): string {
   return content.replace(/この結果を踏まえて、どうしますか？[\s\S]*$/, "").trim();
 }
 
+// 調査者コンテンツを <<<DETAIL>>> で分割
+function parseResearcherContent(content: string): { summary: string; detail: string | null } {
+  const marker = "<<<DETAIL>>>";
+  const idx = content.indexOf(marker);
+  if (idx === -1) return { summary: stripResearcherChoiceText(content), detail: null };
+  return {
+    summary: content.slice(0, idx).trim(),
+    detail: stripResearcherChoiceText(content.slice(idx + marker.length).trim()) || null,
+  };
+}
+
 // 調査者の最終判定テキストを抽出
 function extractResearcherVerdict(messages: { speaker: string; content: string }[]): string {
   const msgs = messages.filter((m) => m.speaker === "researcher");
@@ -140,6 +151,9 @@ export default function ChatInterface() {
   const [showDecideModal, setShowDecideModal] = useState(false);
   const [decideTitleInput, setDecideTitleInput] = useState("");
   const [showPhase1Summary, setShowPhase1Summary] = useState(false);
+
+  // 調査者の折りたたみ状態
+  const [expandedResearcher, setExpandedResearcher] = useState<Set<string>>(new Set());
 
   // 議論終了フロー
   const [showDoneConfirm, setShowDoneConfirm] = useState(false);
@@ -936,6 +950,50 @@ export default function ChatInterface() {
 
           const meta = PERSONAS[msg.speaker as Persona];
           if (!meta) return null;
+
+          if (msg.speaker === "researcher") {
+            const { summary, detail } = parseResearcherContent(msg.content);
+            const isExpanded = expandedResearcher.has(msg.id);
+            return (
+              <div key={msg.id} className="flex justify-start">
+                <div className="max-w-[80%] sm:max-w-[65%]">
+                  <p className={`text-xs mb-1 ml-1 font-semibold ${meta.colorClass} flex items-center gap-1`}>
+                    {meta.emoji} {meta.name[lang]}
+                  </p>
+                  <div
+                    className={`${meta.bgClass} border ${meta.borderClass} px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed shadow-sm text-gray-800`}
+                  >
+                    <div className="whitespace-pre-wrap">{summary}</div>
+                    {detail && (
+                      <>
+                        {isExpanded && (
+                          <div className="mt-3 pt-3 border-t border-teal-200 whitespace-pre-wrap text-gray-700">
+                            {detail}
+                          </div>
+                        )}
+                        <button
+                          onClick={() =>
+                            setExpandedResearcher((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(msg.id)) next.delete(msg.id);
+                              else next.add(msg.id);
+                              return next;
+                            })
+                          }
+                          className="mt-2 text-xs font-semibold text-teal-600 hover:text-teal-800 transition-colors"
+                        >
+                          {isExpanded
+                            ? lang === "ja" ? "閉じる ▲" : "Close ▲"
+                            : lang === "ja" ? "詳細を見る ▼" : "View details ▼"}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
           return (
             <div key={msg.id} className="flex justify-start">
               <div className="max-w-[80%] sm:max-w-[65%]">
@@ -952,7 +1010,7 @@ export default function ChatInterface() {
                     msg.isIntervention ? "border-amber-400 ring-1 ring-amber-300" : meta.borderClass
                   } px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed shadow-sm text-gray-800`}
                 >
-                  {msg.speaker === "researcher" ? stripResearcherChoiceText(msg.content) : msg.content}
+                  {msg.content}
                 </div>
               </div>
             </div>

@@ -2,7 +2,7 @@
 
 アプリ名：FRICTION  
 キャッチコピー：「本当に強いアイデアは、反論に耐えたものだけだ。」  
-作成日：2026-03-27 / 最終更新：2026-04-12  
+作成日：2026-03-27 / 最終更新：2026-04-13  
 作成者：Taku Ono  
 本番URL：https://4person.vercel.app  
 GitHub：https://github.com/oonotaku/4person
@@ -24,11 +24,17 @@ GitHub：https://github.com/oonotaku/4person
 - 一覧に戻るボタン
 - Supabase Auth（メール/パスワード認証）
 - プロアクティブ介入システム（俯瞰者が4トリガーで単独介入）
-- Phase 1 発案者・調査者の対話ループ
-  - 発案者：通常時は2〜3案提示、ブラッシュアップ依頼時は1案のみ深掘り
+- Phase 1の4択選択フロー（発案者→ユーザー選択→調査者）
+  - 発案者が3案提示後、4択ボタンを表示（needs_choice: true + proposals: [タイトル配列]）
+    - ① 案Aを深掘りする → 調査者がその1案のみ調査
+    - ② 案Bを深掘りする → 調査者がその1案のみ調査
+    - ③ 案Cを深掘りする → 調査者がその1案のみ調査
+    - ④ 全く新しい案を出してもらう → 発案者が新しい3案を提示してループ（調査者は呼ばない）
+  - isNewProposal: true フラグで④選択時の調査者自動呼び出しをスキップ
+- Phase 1 調査者の対話ループ
   - 調査者：Web検索で競合・市場・法規制をレポート
   - 調査者の3段階判定：「勝てる余地あり」「勝てる余地は限定的」「参入障壁が高く厳しい」
-  - ①②③ 選択ボタンUI（needs_choice フラグで制御）
+  - ①②③ 選択ボタンUI（調査後・needs_choice フラグで制御）
     - ① この案をブラッシュアップする → 発案者に送信
     - ② 全く新しい案を出してもらう → 発案者に送信
     - ③ この案で次のフェーズに進む → タイトル入力モーダルを表示
@@ -38,6 +44,24 @@ GitHub：https://github.com/oonotaku/4person
 - Phase 2以降で「📋 Phase1サマリーを見る」ボタンを表示
   - Phase 1 サマリーポップアップ：決定案タイトル＋調査者の最終判定を表示
 - フェーズ名：発案（Phase 1）・検証（Phase 2）・統合（Phase 3）
+- フェーズ開始セパレーター
+  - Phase 2開始時：「✅ 検証フェーズ開始：[decided_idea_title]」をチャット上に挿入
+  - Phase 3開始時：「✅ 統合フェーズ開始」をチャット上に挿入
+  - セパレーターは isSeparator フラグで管理し、DBには保存しない
+- doneボタン
+  - 入力欄近くに「🏁 議論を終了する」ボタンを設置（セッション中・ローディングでない場合に表示）
+  - 押すと確認ポップアップ表示（「本当に議論を終了しますか？この操作は取り消せません。」）
+  - 「終了する」を押すと done 処理（サマリー生成）を実行
+- 実行判断サマリーの拡充
+  - 表示順：🎯お題 → 💡決定アイデア＋調査者の最終判定 → ⚖️実行判断 → 📋条件 → 🚀最初の一手
+  - theme・decidedIdeaTitle・researcherVerdict を props として DiscussionSummary コンポーネントに渡す
+- PDF出力機能
+  - サマリーヘッダーに「📄 PDFで保存」ボタンを表示
+  - window.open() で新規タブを開き、インラインスタイルのみのHTMLを注入
+  - window.print() で印刷ダイアログを自動起動（ユーザーが「PDFとして保存」を選択）
+  - onafterprint で印刷後にタブを自動クローズ
+  - フォント：system-ui（日本語対応）、Tailwindクラスは一切使用しない
+  - ファイル名：FRICTION_サマリー_[theme].pdf
 
 ---
 
@@ -97,28 +121,41 @@ GitHub：https://github.com/oonotaku/4person
 ```
 【Phase 1：発案】アイデアをFixするフェーズ
   1. ユーザーがテーマを入力
-  2. 発案者がアイデアを2〜3案提示
-  3. 調査者がWeb検索で競合・市場・法規制をレポート
-     └ レポート末尾に①②③の選択ボタンを表示（needs_choice: true）
-        ① この案をブラッシュアップする
-           → 発案者に送信。発案者は1案のみ深掘りして返す
-           → 調査者が再調査（ループ）
-        ② 全く新しい案を出してもらう
-           → 発案者に送信。発案者は別方向の2〜3案を提示
-           → 調査者が再調査（ループ）
-        ③ この案で次のフェーズに進む
-           → タイトル入力モーダルを表示
-           → タイトルを decided_idea_title としてSupabaseに保存
-           → 「次のフェーズへ」ボタンを表示
+  2. 発案者が3案提示（proposals配列 + <<<NEEDS_CHOICE>>> マーカーを返す）
+  3. UIに4択ボタンを表示
+     ①②③ 案を選択
+        → 調査者がその1案のみWeb検索で調査（競合・市場・法規制）
+        → レポート末尾に①②③の選択ボタンを表示（needs_choice: true）
+           ① この案をブラッシュアップする
+              → 発案者に送信。発案者は1案のみ深掘りして返す
+              → 調査者が再調査（ループ）
+           ② 全く新しい案を出してもらう
+              → 発案者に送信。発案者は別方向の2〜3案を提示
+              → 調査者が再調査（ループ）
+           ③ この案で次のフェーズに進む
+              → タイトル入力モーダルを表示
+              → タイトルを decided_idea_title としてSupabaseに保存
+              → 「次のフェーズへ」ボタンを表示
+     ④ 全く新しい案を出してもらう
+        → isNewProposal: true で発案者のみ呼び出し（調査者はスキップ）
+        → 発案者が新しい3案を提示 → 4択ループに戻る
 
 【Phase 2：検証】アイデアを叩くフェーズ
-  4. 肯定者が可能性を検証
-  5. 批判者が弱点・リスクを指摘
-  6. ユーザーが「次のフェーズへ」を押す
+  4. 「次のフェーズへ」押下 → 「✅ 検証フェーズ開始：[decided_idea_title]」セパレーター挿入
+  5. 肯定者が可能性を検証
+  6. 批判者が弱点・リスクを指摘
+  7. ユーザーが「次のフェーズへ」を押す
 
 【Phase 3：統合】結論を出すフェーズ
-  7. 俯瞰者が議論を構造的に整理
-  8. 統合者が最適解と次のアクションを出す
+  8. 「次のフェーズへ」押下 → 「✅ 統合フェーズ開始」セパレーター挿入
+  9. 俯瞰者が議論を構造的に整理
+  10. 統合者が最適解と次のアクションを出す
+
+【終了】
+  - 「🏁 議論を終了する」ボタン押下 → 確認ポップアップ → done処理
+  - または任意のタイミングで "done" を入力しても同様
+  - サマリー生成：お題・決定アイデア・実行判断・条件・最初の一手
+  - 「📄 PDFで保存」ボタンでブラウザ印刷ダイアログ経由のPDF出力
 ```
 
 ### ユーザーの参加ルール
@@ -190,17 +227,22 @@ ALTER TABLE sessions ADD COLUMN IF NOT EXISTS decided_idea_title text;
 ### フェーズ制連鎖の仕組み
 
 ```javascript
-// Phase 1：発案
-const proposerResponse = await callClaude(PROPOSER_PROMPT, messages);
-// 発案者：通常は2〜3案、ブラッシュアップ依頼時は1案深掘り
+// Phase 1：発案（初回 or ④選択時）
+// callClaudeProposer() を使用（max_tokens: 1024）
+// 戻り値: { content, needsChoice, proposals: ["案Aタイトル", "案Bタイトル", "案Cタイトル"] }
+// needsChoice: true → フロント側で4択ボタンを表示
 
+// ④ が選ばれた場合（isNewProposal: true）
+// → callClaudeProposer() のみ呼び出し、調査者はスキップ → 4択ループへ
+
+// ①②③ が選ばれた場合: target=["researcher"] で調査者を呼び出し
 const researcherResponse = await callClaudeWithSearch(RESEARCHER_PROMPT, messages);
 // 戻り値: { content, isDecided, needsChoice }
-// needsChoice: true → フロント側で①②③の選択ボタンを表示
+// needsChoice: true → フロント側で調査者の①②③の選択ボタンを表示
 // isDecided: true  → phaseCompleted: true を返し「次のフェーズへ」ボタンを表示
 
-// ① or ② が選ばれた場合: target=["proposer"] で再度 API 呼び出し → ループ
-// ③ が選ばれた場合: API呼び出しなし → タイトル入力モーダル → 次フェーズボタン
+// 調査後の①②が選ばれた場合: target=["proposer"] で再度 API 呼び出し → ループ
+// 調査後の③が選ばれた場合: API呼び出しなし → タイトル入力モーダル → 次フェーズボタン
 
 // Phase 2：検証（ユーザーが「次のフェーズへ」を押した後）
 const affirmerResponse = await callClaude(AFFIRMER_PROMPT, messages);
@@ -211,12 +253,37 @@ const observerResponse = await callClaude(OBSERVER_PROMPT, messages);
 const synthesizerResponse = await callClaude(SYNTHESIZER_PROMPT, messages);
 ```
 
+### 発案者の出力フォーマット（<<<NEEDS_CHOICE>>>）
+
+```
+{"proposals": ["案Aの短いタイトル", "案Bの短いタイトル", "案Cの短いタイトル"]}
+<<<NEEDS_CHOICE>>>
+
+（本文：3案の詳細説明）
+```
+- フロントは proposals 配列を受け取り、①②③のボタンラベルとして使用する
+- `callClaudeProposer()` 関数がJSONとマーカーをパースしてクリーンな content を返す
+
 ### 調査者の決断検出マーカー
 
 ```
 <<<NEEDS_CHOICE>>>  調査レポートの末尾に①②③の選択肢を提示した場合
 <<<IS_DECIDED>>>    ユーザーが①②③のいずれかを選択・決断した場合
 <<<CONTINUE>>>      その他（追加調査・通常の会話など）
+```
+
+### isNewProposal フラグ
+
+```javascript
+// ④「全く新しい案を出してもらう」選択時にフロントから送信
+{ isNewProposal: true }
+
+// route.ts 側でこのフラグがある場合、発案者のみ呼び出してサブ人格ループをスキップ
+if (isNewProposal) {
+  const result = await callClaudeProposer(language, messages);
+  return { responses: [{ persona: "proposer", content: result.content }],
+           needsChoice: result.needsChoice, proposals: result.proposals };
+}
 ```
 
 ### 調査者のWeb検索実装
