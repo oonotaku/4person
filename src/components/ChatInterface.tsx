@@ -151,7 +151,7 @@ export default function ChatInterface() {
   const [showPhase1Summary, setShowPhase1Summary] = useState(false);
 
   // 調査者の折りたたみ状態
-  const [expandedResearcher, setExpandedResearcher] = useState<Set<string>>(new Set());
+  const [expandedResearcher, setExpandedResearcher] = useState<Set<number>>(new Set());
 
   // 議論終了フロー
   const [showDoneConfirm, setShowDoneConfirm] = useState(false);
@@ -910,7 +910,7 @@ export default function ChatInterface() {
           </div>
         )}
 
-        {messages.map((msg) => {
+        {messages.map((msg, msgIndex) => {
           // フェーズ開始セパレーター
           if (msg.isSeparator) {
             return (
@@ -951,7 +951,7 @@ export default function ChatInterface() {
 
           if (msg.speaker === "researcher") {
             const { summary, detail } = parseResearcherContent(msg.content);
-            const isExpanded = expandedResearcher.has(msg.id);
+            const isExpanded = expandedResearcher.has(msgIndex);
             return (
               <div key={msg.id} className="flex justify-start">
                 <div className="max-w-[80%] sm:max-w-[65%]">
@@ -973,8 +973,8 @@ export default function ChatInterface() {
                           onClick={() =>
                             setExpandedResearcher((prev) => {
                               const next = new Set(prev);
-                              if (next.has(msg.id)) next.delete(msg.id);
-                              else next.add(msg.id);
+                              if (next.has(msgIndex)) next.delete(msgIndex);
+                              else next.add(msgIndex);
                               return next;
                             })
                           }

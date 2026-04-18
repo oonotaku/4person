@@ -398,6 +398,8 @@ async function callClaudeWithSearch(
     .join("\n")
     .trim();
 
+  console.log("[BACKEND researcher raw]", rawText);
+
   const isDecided = rawText.includes("<<<IS_DECIDED>>>");
   const needsChoice = rawText.includes("<<<NEEDS_CHOICE>>>");
   const content = rawText
