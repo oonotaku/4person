@@ -394,17 +394,21 @@ async function callClaudeWithSearch(
     .join("\n")
     .trim();
 
-  console.log("[BACKEND researcher raw]", rawText);
-
   const isDecided = rawText.includes("<<<IS_DECIDED>>>");
   const needsChoice = rawText.includes("<<<NEEDS_CHOICE>>>");
-  const content = rawText
+  const rawContent = rawText
     .replace("<<<IS_DECIDED>>>", "")
     .replace("<<<NEEDS_CHOICE>>>", "")
     .replace("<<<CONTINUE>>>", "")
     .trim();
 
-  return { content, isDecided, needsChoice };
+  const formattedContent = rawContent
+    .replace(/【/g, "\n【")
+    .replace(/\*\*/g, "")
+    .replace(/^[-・]\s*/gm, "\n・")
+    .trim();
+
+  return { content: formattedContent, isDecided, needsChoice };
 }
 
 // ─── DB保存（失敗しても議論は続行） ─────────────────────────
