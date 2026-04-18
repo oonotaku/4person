@@ -97,22 +97,21 @@ ${langInstruction}`,
 - ユーザーから「別の視点で調査して」「もっと詳しく」「再調査して」等の追加調査依頼が来た場合：web_searchを再実行して追加レポートを返す
 
 ## 出力フォーマット（必須・厳守）
-必ず以下の順序で出力すること。改行は \n で出力すること：
+必ず最初の行に以下の形式で判定サマリーを出力すること：
 
-1行目：判定バッジ（例：「✅ 勝てる余地あり」「⚠️ 勝てる余地は限定的」「🚫 参入障壁が高く厳しい」）
-2行目：市場・競合状況の要約（1文）
-3行目：差別化余地または課題の要約（1文）
-4行目以降：詳細レポート（競合調査・市場規模・法規制等を箇条書きで記述）
-最終行：「この結果を踏まえて、どうしますか？ ① この案をブラッシュアップする ② 全く新しい案を出してもらう ③ この案で次のフェーズに進む」
+SUMMARY: [判定バッジ] [50文字以内の要約]
 
 例：
-✅ 勝てる余地あり
-日本のSaaS市場は拡大中で競合は存在するが大手は中小企業向けに弱い。
-中小企業×低価格帯に明確な空白があり差別化余地あり。
-【競合】A社・B社が先行。ともに大企業向けで月額5万円以上。
-【市場規模】国内SaaS市場は2025年に約2兆円見込み。
-【法規制】特になし。個人情報保護法の対応は必要。
-この結果を踏まえて、どうしますか？ ① この案をブラッシュアップする ② 全く新しい案を出してもらう ③ この案で次のフェーズに進む
+SUMMARY: ✅ 勝てる余地あり。競合は存在するが差別化余地が明確。
+
+その後に詳細レポートを続けること：
+- 競合調査・市場規模・法規制等を記述
+- 最終行：「この結果を踏まえて、どうしますか？ ① この案をブラッシュアップする ② 全く新しい案を出してもらう ③ この案で次のフェーズに進む」
+
+判定バッジは必ず以下のいずれか：
+- ✅ 勝てる余地あり
+- ⚠️ 勝てる余地は限定的
+- 🚫 参入障壁が高く厳しい
 
 ## 決断検出（必須・省略不可）
 発言の最後の行に必ず以下のいずれか1つだけを出力すること：
@@ -408,11 +407,14 @@ async function callClaudeWithSearch(
     .replace(/^[-・]\s*/gm, "\n・")
     .trim();
 
-  const lines = formattedContent.split(/\n/).filter(l => l.trim() !== "");
-  const summary = lines.slice(0, 3).join("\n");
-  const detail = lines.length > 3 ? lines.slice(3).join("\n") : null;
+  const summaryMatch = rawContent.match(/^SUMMARY:\s*(.+)/);
+  const summary = summaryMatch ? summaryMatch[1].trim() : rawContent.slice(0, 80);
+  const detailRaw = summaryMatch
+    ? rawContent.replace(/^SUMMARY:\s*.+\n?/, "").trim()
+    : rawContent.slice(80);
+  const detail = detailRaw.length > 0 ? detailRaw : null;
 
-  return { content: formattedContent, summary, detail, isDecided, needsChoice };
+  return { content: rawContent, summary, detail, isDecided, needsChoice };
 }
 
 // ─── DB保存（失敗しても議論は続行） ─────────────────────────
