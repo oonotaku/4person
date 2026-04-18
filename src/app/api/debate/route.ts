@@ -368,7 +368,9 @@ async function callClaudeProposer(
     .replace(/\{"proposals"\s*:\s*\[[\s\S]*?\]\}/, "")
     .trim();
 
-  return { content, needsChoice, proposals };
+  const formattedContent = content.replace(/💡/g, "\n\n💡").trim();
+
+  return { content: formattedContent, needsChoice, proposals };
 }
 
 // ─── 調査者：Web検索付きClaude呼び出し ──────────────────────
