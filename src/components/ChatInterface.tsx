@@ -295,9 +295,6 @@ export default function ChatInterface() {
   async function displayResponses(responses: DebateResponse["responses"]) {
     for (let i = 0; i < responses.length; i++) {
       const r = responses[i];
-      if (r.persona === "proposer") {
-        console.log("[DEBUG proposer content]", JSON.stringify(r.content));
-      }
       await new Promise<void>((resolve) => {
         setTimeout(() => {
           setMessages((prev) => [
@@ -1011,9 +1008,13 @@ export default function ChatInterface() {
                 <div
                   className={`${meta.bgClass} border ${
                     msg.isIntervention ? "border-amber-400 ring-1 ring-amber-300" : meta.borderClass
-                  } px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed shadow-sm text-gray-800 whitespace-pre-wrap`}
+                  } px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed shadow-sm text-gray-800`}
                 >
-                  {msg.content}
+                  {msg.speaker === "proposer"
+                    ? msg.content.split("\n").map((line, i) => (
+                        <span key={i} className="block">{line || "\u00A0"}</span>
+                      ))
+                    : msg.content}
                 </div>
               </div>
             </div>
