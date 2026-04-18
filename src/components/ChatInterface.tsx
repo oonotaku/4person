@@ -288,6 +288,9 @@ export default function ChatInterface() {
   async function displayResponses(responses: DebateResponse["responses"]) {
     for (let i = 0; i < responses.length; i++) {
       const r = responses[i];
+      if (r.persona === "researcher") {
+        console.log("[r.summary]", r.summary);
+      }
       await new Promise<void>((resolve) => {
         setTimeout(() => {
           setMessages((prev) => [
@@ -960,7 +963,10 @@ export default function ChatInterface() {
                     className={`${meta.bgClass} border ${meta.borderClass} px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed shadow-sm text-gray-800`}
                   >
                     <div className="whitespace-pre-wrap">
-                      {msg.summary?.replace(/^SUMMARY:\s*/i, "") ?? msg.content.slice(0, 80)}
+                      {(() => {
+                        const s = msg.summary ?? msg.content.slice(0, 80);
+                        return s.startsWith("SUMMARY:") ? s.slice(s.indexOf(":") + 1).trim() : s;
+                      })()}
                     </div>
                     {detail && (
                       <>
