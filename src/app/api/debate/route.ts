@@ -377,7 +377,7 @@ async function callClaudeProposer(
 async function callClaudeWithSearch(
   language: "ja" | "en",
   messages: { role: "user" | "assistant"; content: string }[]
-): Promise<{ content: string; summary: string; detail: string | null; isDecided: boolean; needsChoice: boolean }> {
+): Promise<{ content: string; isDecided: boolean; needsChoice: boolean }> {
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: 1500,
@@ -395,26 +395,13 @@ async function callClaudeWithSearch(
 
   const isDecided = rawText.includes("<<<IS_DECIDED>>>");
   const needsChoice = rawText.includes("<<<NEEDS_CHOICE>>>");
-  const rawContent = rawText
+  const content = rawText
     .replace("<<<IS_DECIDED>>>", "")
     .replace("<<<NEEDS_CHOICE>>>", "")
     .replace("<<<CONTINUE>>>", "")
     .trim();
 
-  const formattedContent = rawContent
-    .replace(/【/g, "\n【")
-    .replace(/\*\*/g, "")
-    .replace(/^[-・]\s*/gm, "\n・")
-    .trim();
-
-  const summaryMatch = rawContent.match(/^SUMMARY:\s*(.+)/);
-  const summary = summaryMatch ? summaryMatch[1].trim() : rawContent.slice(0, 80);
-  const detailRaw = summaryMatch
-    ? rawContent.replace(/^SUMMARY:\s*.+\n?/, "").trim()
-    : rawContent.slice(80);
-  const detail = detailRaw.length > 0 ? detailRaw : null;
-
-  return { content: rawContent, summary, detail, isDecided, needsChoice };
+  return { content, isDecided, needsChoice };
 }
 
 // ─── DB保存（失敗しても議論は続行） ─────────────────────────
@@ -483,8 +470,6 @@ export async function POST(request: Request) {
     const results: {
       persona: string;
       content: string;
-      summary?: string;
-      detail?: string | null;
       isMain: boolean;
       isIntervention?: boolean;
     }[] = [];
@@ -608,10 +593,10 @@ export async function POST(request: Request) {
           await dbSaveMessage(sessionId, persona as Speaker, content);
           chainMessages.push({ role: "assistant", content: `[${persona}] ${content}` });
         } else if (persona === "researcher") {
-          const { content: researcherContent, summary: rSum, detail: rDet, isDecided, needsChoice: nc } = await callClaudeWithSearch(language, chainMessages);
+          const { content: researcherContent, isDecided, needsChoice: nc } = await callClaudeWithSearch(language, chainMessages);
           isDecidedByResearcher = isDecided;
           needsChoiceByResearcher = nc;
-          results.push({ persona, content: researcherContent, summary: rSum, detail: rDet, isMain: true });
+          results.push({ persona, content: researcherContent, isMain: true });
           await dbSaveMessage(sessionId, persona as Speaker, researcherContent);
           chainMessages.push({ role: "assistant", content: `[${persona}] ${researcherContent}` });
         } else {

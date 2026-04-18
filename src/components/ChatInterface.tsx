@@ -17,8 +17,6 @@ interface Message {
   id: string;
   speaker: Speaker;
   content: string;
-  summary?: string;
-  detail?: string;
   target: Persona[] | "all";
   timestamp: Date;
   isIntervention?: boolean;
@@ -86,8 +84,6 @@ interface DebateResponse {
   responses: {
     persona: Persona;
     content: string;
-    summary?: string;
-    detail?: string;
     isMain: boolean;
     isIntervention?: boolean;
   }[];
@@ -288,9 +284,6 @@ export default function ChatInterface() {
   async function displayResponses(responses: DebateResponse["responses"]) {
     for (let i = 0; i < responses.length; i++) {
       const r = responses[i];
-      if (r.persona === "researcher") {
-        console.log("[r.summary]", r.summary);
-      }
       await new Promise<void>((resolve) => {
         setTimeout(() => {
           setMessages((prev) => [
@@ -299,8 +292,6 @@ export default function ChatInterface() {
               id: crypto.randomUUID(),
               speaker: r.persona,
               content: r.content,
-              summary: r.summary,
-              detail: r.detail,
               target: "all",
               timestamp: new Date(),
               isIntervention: r.isIntervention,
@@ -950,9 +941,11 @@ export default function ChatInterface() {
           if (!meta) return null;
 
           if (msg.speaker === "researcher") {
-            const summary = msg.summary ?? stripResearcherChoiceText(msg.content);
-            const detail = msg.detail ?? null;
+            const fullContent = stripResearcherChoiceText(msg.content);
             const isExpanded = openResearcherIndex === msgIndex;
+            const firstSentenceEnd = fullContent.search(/[。.]\s/);
+            const summary = firstSentenceEnd > 0 ? fullContent.slice(0, firstSentenceEnd + 1) : fullContent.slice(0, 100);
+            const detail = fullContent.slice(summary.length).trim();
             return (
               <div key={msg.id} className="flex justify-start">
                 <div className="max-w-[80%] sm:max-w-[65%]">
@@ -962,12 +955,7 @@ export default function ChatInterface() {
                   <div
                     className={`${meta.bgClass} border ${meta.borderClass} px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed shadow-sm text-gray-800`}
                   >
-                    <div className="whitespace-pre-wrap">
-                      {(() => {
-                        const s = msg.summary ?? msg.content.slice(0, 80);
-                        return s.startsWith("SUMMARY:") ? s.slice(s.indexOf(":") + 1).trim() : s;
-                      })()}
-                    </div>
+                    <div className="whitespace-pre-wrap">{summary}</div>
                     {detail && (
                       <>
                         {isExpanded && (
