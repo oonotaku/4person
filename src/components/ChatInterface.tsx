@@ -941,9 +941,10 @@ export default function ChatInterface() {
           if (!meta) return null;
 
           if (msg.speaker === "researcher") {
-            const lines = stripResearcherChoiceText(msg.content).split("\n").filter(l => l.trim() !== "");
-            const summaryLines = lines.slice(0, 3);
-            const detailLines = lines.slice(3);
+            const content = stripResearcherChoiceText(msg.content);
+            const cutPoint = 120;
+            const summary = content.slice(0, cutPoint);
+            const detail = content.length > cutPoint ? content.slice(cutPoint) : null;
             const isExpanded = openResearcherIndex === msgIndex;
             return (
               <div key={msg.id} className="flex justify-start">
@@ -954,12 +955,12 @@ export default function ChatInterface() {
                   <div
                     className={`${meta.bgClass} border ${meta.borderClass} px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed shadow-sm text-gray-800`}
                   >
-                    <div className="whitespace-pre-wrap">{summaryLines.join("\n")}</div>
-                    {detailLines.length > 0 && (
+                    <div className="whitespace-pre-wrap">{summary}</div>
+                    {detail && (
                       <>
                         {isExpanded && (
                           <div className="mt-3 pt-3 border-t border-teal-200 whitespace-pre-wrap text-gray-700">
-                            {detailLines.join("\n")}
+                            {detail}
                           </div>
                         )}
                         <button

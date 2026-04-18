@@ -402,6 +402,8 @@ async function callClaudeWithSearch(
     .replace("<<<CONTINUE>>>", "")
     .trim();
 
+  console.log("[researcher rawContent]", rawContent.slice(0, 300));
+
   const formattedContent = rawContent
     .replace(/【/g, "\n【")
     .replace(/\*\*/g, "")
