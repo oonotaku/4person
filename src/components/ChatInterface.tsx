@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { createSession, getSessions, getSession, getMessages, saveMessage, updateSessionPhase, updateDecidedIdeaTitle } from "@/lib/db";
 import { isDoneMessage } from "@/lib/utils/messageHandler";
 import type { Session as DbSession } from "@/lib/supabase";
@@ -1011,8 +1011,11 @@ export default function ChatInterface() {
                   } px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed shadow-sm text-gray-800`}
                 >
                   {msg.speaker === "proposer"
-                    ? msg.content.split("\n").map((line, i) => (
-                        <span key={i} className="block">{line || "\u00A0"}</span>
+                    ? msg.content.split("\n").map((line, i, arr) => (
+                        <React.Fragment key={i}>
+                          {line}
+                          {i < arr.length - 1 && <br />}
+                        </React.Fragment>
                       ))
                     : msg.content}
                 </div>
