@@ -368,7 +368,10 @@ async function callClaudeProposer(
     .replace(/\{"proposals"\s*:\s*\[[\s\S]*?\]\}/, "")
     .trim();
 
-  const formattedContent = content.replace(/💡/g, "\n💡").trim();
+  const formattedContent = content
+    .replace(/・/g, "\n・")
+    .replace(/💡/g, "\n\n💡")
+    .trim();
 
   console.log("[BACKEND proposer]", JSON.stringify(formattedContent));
 
