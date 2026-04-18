@@ -17,6 +17,8 @@ interface Message {
   id: string;
   speaker: Speaker;
   content: string;
+  summary?: string;
+  detail?: string;
   target: Persona[] | "all";
   timestamp: Date;
   isIntervention?: boolean;
@@ -84,6 +86,8 @@ interface DebateResponse {
   responses: {
     persona: Persona;
     content: string;
+    summary?: string;
+    detail?: string;
     isMain: boolean;
     isIntervention?: boolean;
   }[];
@@ -292,6 +296,8 @@ export default function ChatInterface() {
               id: crypto.randomUUID(),
               speaker: r.persona,
               content: r.content,
+              summary: r.summary,
+              detail: r.detail,
               target: "all",
               timestamp: new Date(),
               isIntervention: r.isIntervention,
@@ -941,10 +947,8 @@ export default function ChatInterface() {
           if (!meta) return null;
 
           if (msg.speaker === "researcher") {
-            const content = stripResearcherChoiceText(msg.content);
-            const cutPoint = 120;
-            const summary = content.slice(0, cutPoint);
-            const detail = content.length > cutPoint ? content.slice(cutPoint) : null;
+            const summary = msg.summary ?? stripResearcherChoiceText(msg.content);
+            const detail = msg.detail ?? null;
             const isExpanded = openResearcherIndex === msgIndex;
             return (
               <div key={msg.id} className="flex justify-start">

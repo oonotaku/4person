@@ -378,7 +378,7 @@ async function callClaudeProposer(
 async function callClaudeWithSearch(
   language: "ja" | "en",
   messages: { role: "user" | "assistant"; content: string }[]
-): Promise<{ content: string; isDecided: boolean; needsChoice: boolean }> {
+): Promise<{ content: string; summary: string; detail: string | null; isDecided: boolean; needsChoice: boolean }> {
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: 1500,
@@ -402,15 +402,17 @@ async function callClaudeWithSearch(
     .replace("<<<CONTINUE>>>", "")
     .trim();
 
-  console.log("[researcher rawContent]", rawContent.slice(0, 300));
-
   const formattedContent = rawContent
     .replace(/【/g, "\n【")
     .replace(/\*\*/g, "")
     .replace(/^[-・]\s*/gm, "\n・")
     .trim();
 
-  return { content: formattedContent, isDecided, needsChoice };
+  const paragraphs = formattedContent.split(/\n\n+/);
+  const summary = paragraphs[0].trim();
+  const detail = paragraphs.slice(1).join("\n\n").trim() || null;
+
+  return { content: formattedContent, summary, detail, isDecided, needsChoice };
 }
 
 // ─── DB保存（失敗しても議論は続行） ─────────────────────────
@@ -479,6 +481,8 @@ export async function POST(request: Request) {
     const results: {
       persona: string;
       content: string;
+      summary?: string;
+      detail?: string | null;
       isMain: boolean;
       isIntervention?: boolean;
     }[] = [];
@@ -602,10 +606,10 @@ export async function POST(request: Request) {
           await dbSaveMessage(sessionId, persona as Speaker, content);
           chainMessages.push({ role: "assistant", content: `[${persona}] ${content}` });
         } else if (persona === "researcher") {
-          const { content: researcherContent, isDecided, needsChoice: nc } = await callClaudeWithSearch(language, chainMessages);
+          const { content: researcherContent, summary: rSum, detail: rDet, isDecided, needsChoice: nc } = await callClaudeWithSearch(language, chainMessages);
           isDecidedByResearcher = isDecided;
           needsChoiceByResearcher = nc;
-          results.push({ persona, content: researcherContent, isMain: true });
+          results.push({ persona, content: researcherContent, summary: rSum, detail: rDet, isMain: true });
           await dbSaveMessage(sessionId, persona as Speaker, researcherContent);
           chainMessages.push({ role: "assistant", content: `[${persona}] ${researcherContent}` });
         } else {
