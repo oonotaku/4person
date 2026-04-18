@@ -106,15 +106,6 @@ function stripResearcherChoiceText(content: string): string {
   return content.replace(/この結果を踏まえて、どうしますか？[\s\S]*$/, "").trim();
 }
 
-// 調査者コンテンツを <<<DETAIL>>> で分割（スペース・改行を含む揺れに対応）
-function parseResearcherContent(content: string): { summary: string; detail: string | null } {
-  const match = content.match(/<<<\s*DETAIL\s*>>>/);
-  if (!match || match.index === undefined) return { summary: stripResearcherChoiceText(content), detail: null };
-  const summary = content.slice(0, match.index).trim();
-  const detail = stripResearcherChoiceText(content.slice(match.index + match[0].length).trim()) || null;
-  return { summary, detail };
-}
-
 // 調査者の最終判定テキストを抽出
 function extractResearcherVerdict(messages: { speaker: string; content: string }[]): string {
   const msgs = messages.filter((m) => m.speaker === "researcher");
@@ -150,8 +141,8 @@ export default function ChatInterface() {
   const [decideTitleInput, setDecideTitleInput] = useState("");
   const [showPhase1Summary, setShowPhase1Summary] = useState(false);
 
-  // 調査者の折りたたみ状態
-  const [expandedResearcher, setExpandedResearcher] = useState<Set<number>>(new Set());
+  // 調査者の折りたたみ状態（現在開いているメッセージのindexを1つだけ管理）
+  const [openResearcherIndex, setOpenResearcherIndex] = useState<number | null>(null);
 
   // 議論終了フロー
   const [showDoneConfirm, setShowDoneConfirm] = useState(false);
@@ -950,8 +941,10 @@ export default function ChatInterface() {
           if (!meta) return null;
 
           if (msg.speaker === "researcher") {
-            const { summary, detail } = parseResearcherContent(msg.content);
-            const isExpanded = expandedResearcher.has(msgIndex);
+            const lines = stripResearcherChoiceText(msg.content).split("\n").filter(l => l.trim() !== "");
+            const summaryLines = lines.slice(0, 3);
+            const detailLines = lines.slice(3);
+            const isExpanded = openResearcherIndex === msgIndex;
             return (
               <div key={msg.id} className="flex justify-start">
                 <div className="max-w-[80%] sm:max-w-[65%]">
@@ -961,23 +954,16 @@ export default function ChatInterface() {
                   <div
                     className={`${meta.bgClass} border ${meta.borderClass} px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed shadow-sm text-gray-800`}
                   >
-                    <div className="whitespace-pre-wrap">{summary}</div>
-                    {detail && (
+                    <div className="whitespace-pre-wrap">{summaryLines.join("\n")}</div>
+                    {detailLines.length > 0 && (
                       <>
                         {isExpanded && (
                           <div className="mt-3 pt-3 border-t border-teal-200 whitespace-pre-wrap text-gray-700">
-                            {detail}
+                            {detailLines.join("\n")}
                           </div>
                         )}
                         <button
-                          onClick={() =>
-                            setExpandedResearcher((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(msgIndex)) next.delete(msgIndex);
-                              else next.add(msgIndex);
-                              return next;
-                            })
-                          }
+                          onClick={() => setOpenResearcherIndex(isExpanded ? null : msgIndex)}
                           className="mt-2 text-xs font-semibold text-teal-600 hover:text-teal-800 transition-colors"
                         >
                           {isExpanded
