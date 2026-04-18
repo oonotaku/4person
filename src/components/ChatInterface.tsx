@@ -295,6 +295,9 @@ export default function ChatInterface() {
   async function displayResponses(responses: DebateResponse["responses"]) {
     for (let i = 0; i < responses.length; i++) {
       const r = responses[i];
+      if (r.persona === "proposer") {
+        console.log("[DEBUG proposer content]", JSON.stringify(r.content));
+      }
       await new Promise<void>((resolve) => {
         setTimeout(() => {
           setMessages((prev) => [
